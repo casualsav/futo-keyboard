@@ -78,8 +78,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: futo-keyboard-unstable-debug-apk
-          path: build/outputs/apk/unstable/debug/*.apk
-          if-no-files-found: ignore
+          # A build limited to one ABI writes its APK under intermediates, not outputs.
+          path: |
+            build/outputs/apk/unstable/debug/*.apk
+            build/intermediates/apk/unstable/debug/*.apk
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload the test results
