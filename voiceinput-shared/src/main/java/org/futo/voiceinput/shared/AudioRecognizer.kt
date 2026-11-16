@@ -77,6 +77,10 @@ private fun getRecordingDeviceKind(type: Int): String {
     }
 }
 
+// Auto-stop ends the recording after this many 30 ms VAD frames of silence once speech was heard:
+// 33 frames is about one second (upstream waits 66, about two).
+private const val AUTO_STOP_SILENCE_FRAMES = 33
+
 data class RecordingSettings(
     val preferBluetoothMic: Boolean,
     val requestAudioFocus: Boolean,
@@ -335,7 +339,7 @@ class AudioRecognizer(
 
             var isRunningOutOfSpace = (floatSamples.remaining() < nRead.coerceAtLeast(1600)) && !expandSpaceIfAllowed()
 
-            val hasNotTalkedRecently = hasTalked && (numConsecutiveNonSpeech > 66) && useVAD
+            val hasNotTalkedRecently = hasTalked && (numConsecutiveNonSpeech > AUTO_STOP_SILENCE_FRAMES) && useVAD
             if (isRunningOutOfSpace || hasNotTalkedRecently) {
                 yield()
                 withContext(Dispatchers.Main) {
