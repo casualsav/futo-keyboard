@@ -52,7 +52,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
 
+      # FUTO derives these from full git history, which a shallow checkout lacks.
       - name: Unit tests and debug APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: personal-${{ github.run_number }}
         run: ./gradlew --no-daemon --continue testUnstableDebugUnitTest assembleUnstableDebug
 
       - name: Upload the APK
