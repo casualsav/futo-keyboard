@@ -20,6 +20,18 @@ jobs:
     runs-on: ${{ vars.TEST_RUNNER || 'org-tests' }}
     timeout-minutes: 90
     steps:
+      # The runners have no git-lfs; FUTO's swipe model submodule stores its files in LFS.
+      - name: Install git-lfs
+        run: |
+          v=v3.8.1
+          case "$(uname -m)" in aarch64) a=arm64 ;; *) a=amd64 ;; esac
+          f="git-lfs-linux-$a-$v.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://github.com/git-lfs/git-lfs/releases/download/$v/$f"
+          curl -fsSL "https://github.com/git-lfs/git-lfs/releases/download/$v/sha256sums.asc" | grep " $f\$" | sha256sum -c -
+          tar xzf "$f"
+          dirname "$(find "$RUNNER_TEMP" -maxdepth 3 -type f -name git-lfs | head -1)" >> "$GITHUB_PATH"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
