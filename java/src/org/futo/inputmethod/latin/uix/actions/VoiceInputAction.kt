@@ -33,6 +33,7 @@ import org.futo.inputmethod.latin.uix.ActionWindow
 import org.futo.inputmethod.latin.uix.CAN_EXPAND_SPACE
 import org.futo.inputmethod.latin.uix.CloseResult
 import org.futo.inputmethod.latin.uix.DISALLOW_SYMBOLS
+import org.futo.inputmethod.latin.uix.SPOKEN_PUNCTUATION_ONLY
 import org.futo.inputmethod.latin.uix.ENABLE_SOUND
 import org.futo.inputmethod.latin.uix.KeyboardManagerForAction
 import org.futo.inputmethod.latin.uix.PREFER_BLUETOOTH
@@ -120,6 +121,7 @@ private class VoiceInputActionWindow(
     val context = manager.getContext()
 
     private var shouldPlaySounds: Boolean = false
+    private val spokenPunctuationOnly: Boolean = context.getSetting(SPOKEN_PUNCTUATION_ONLY)
     private fun loadSettings(): RecognizerViewSettings {
         val enableSound = context.getSetting(ENABLE_SOUND)
         val verboseFeedback = false//context.getSetting(VERBOSE_PROGRESS)
@@ -267,7 +269,7 @@ private class VoiceInputActionWindow(
         wasFinished = true
 
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = ModelOutputSanitizer.sanitize(result, inputTransaction.textContext)
+            val sanitized = ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly)
             inputTransaction.commit(sanitized)
             manager.announce(result)
             manager.closeActionWindow()
@@ -276,7 +278,7 @@ private class VoiceInputActionWindow(
 
     override fun partialResult(result: String) {
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = ModelOutputSanitizer.sanitize(result, inputTransaction.textContext)
+            val sanitized = ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly)
             inputTransaction.updatePartial(sanitized)
         }
     }

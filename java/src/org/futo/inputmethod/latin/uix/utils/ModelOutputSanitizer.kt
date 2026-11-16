@@ -32,14 +32,16 @@ object ModelOutputSanitizer {
     private val beforeEndsPunctRegex = Regex(".*[.:?!]$")
 
     @JvmStatic
-    fun sanitize(result: String, textContext: TextContext?): String {
+    @JvmOverloads
+    fun sanitize(result: String, textContext: TextContext?, spokenPunctuationOnly: Boolean = false): String {
+        val text = if (spokenPunctuationOnly) SpokenPunctuation.apply(result) else result
         if (textContext == null) {
-            return result
+            return text
         }
 
         val locale = RichInputMethodManager.getInstance().getCurrentSubtypeLocale()
 
-        var trimmed = result.trim()
+        var trimmed = text.trim()
         if (trimmed.isEmpty()) return ""
 
         val before = (textContext.beforeCursor?.toString() ?: "")

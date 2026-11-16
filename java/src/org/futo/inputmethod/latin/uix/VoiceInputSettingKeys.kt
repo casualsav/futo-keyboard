@@ -24,6 +24,11 @@ val ENABLE_MULTILINGUAL = SettingsKey(
     default = false
 )
 
+val SPOKEN_PUNCTUATION_ONLY = SettingsKey(
+    key = booleanPreferencesKey("spoken_punctuation_only"),
+    default = true
+)
+
 val DISALLOW_SYMBOLS = SettingsKey(
     key = booleanPreferencesKey("disallow_symbols"),
     default = true

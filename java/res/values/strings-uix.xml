@@ -592,6 +592,8 @@
     <string name="voice_input_settings_audio_focus">Audio Focus</string>
     <string name="voice_input_settings_audio_focus_subtitle">Pause videos/music when voice input is activated</string>
     <string name="voice_input_settings_suppress_symbols">Suppress symbols</string>
+    <string name="voice_input_settings_spoken_punctuation_only">Spoken punctuation only</string>
+    <string name="voice_input_settings_spoken_punctuation_only_subtitle">Removes the punctuation the voice model adds on its own, so only punctuation you say (\"comma\", \"period\", \"question mark\") is typed</string>
     <string name="voice_input_settings_suppress_symbols_subtitle">Prevent voice input from outputting symbols</string>
     <string name="voice_input_settings_long_form">Long-form voice input</string>
     <string name="voice_input_settings_long_form_subtitle">If disabled, voice input will auto-stop after 30 seconds.</string>
