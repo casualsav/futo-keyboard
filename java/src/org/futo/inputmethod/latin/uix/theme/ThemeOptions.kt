@@ -26,6 +26,7 @@ import org.futo.inputmethod.latin.uix.theme.presets.SteelGray
 import org.futo.inputmethod.latin.uix.theme.presets.Sunflower
 import org.futo.inputmethod.latin.uix.theme.presets.VoiceInputTheme
 import org.futo.inputmethod.latin.uix.theme.presets.DevTheme
+import org.futo.inputmethod.latin.uix.theme.presets.Midnight
 import org.futo.inputmethod.latin.uix.theme.presets.HighContrastYellow
 
 data class ThemeOption(
@@ -63,13 +64,14 @@ val ThemeOptions = mapOf(
     DevTheme.key to DevTheme,
     HighContrastYellow.key to HighContrastYellow,
     CatppuccinMocha.key to CatppuccinMocha,
+    Midnight.key to Midnight,
 )
 
 val ThemeOptionKeys = ThemeOptions.keys
 
 fun defaultThemeOption(context: Context): ThemeOption =
     if(context.resources.getBoolean(R.bool.use_dev_styling)) {
-        DevTheme
+        Midnight
     } else {
         if(DynamicSystemTheme.available(context)) {
             DynamicSystemTheme
