@@ -64,24 +64,21 @@ jobs:
           echo "X86_64_LIBS=$d/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
 
       # FUTO derives the version from full git history, which a shallow checkout lacks.
-      # Only arm64 is built: the owner's phone is arm64, and each ABI is a full native compile.
+      # Only arm64 is built (.github/arm64-only.gradle): the owner's phone is arm64, and each ABI is a full native compile.
       - name: Unit tests and debug APK
         env:
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: personal-${{ github.run_number }}
         run: |
           export LD_LIBRARY_PATH="$X86_64_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          ./gradlew --no-daemon --continue -Pandroid.injected.build.abi=arm64-v8a testUnstableDebugUnitTest assembleUnstableDebug
+          ./gradlew --no-daemon --continue --init-script .github/arm64-only.gradle testUnstableDebugUnitTest assembleUnstableDebug
 
       - name: Upload the APK
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: futo-keyboard-unstable-debug-apk
-          # A build limited to one ABI writes its APK under intermediates, not outputs.
-          path: |
-            build/outputs/apk/unstable/debug/*.apk
-            build/intermediates/apk/unstable/debug/*.apk
+          path: build/outputs/apk/unstable/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 

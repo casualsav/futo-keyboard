@@ -1,0 +1,8 @@
+// Builds native code for arm64 only (the owner's phone), without the IDE-only
+// android.injected.build.abi property, whose APKs are marked testOnly and refuse to install.
+allprojects {
+    pluginManager.withPlugin('com.android.application') {
+        android.defaultConfig.ndk.abiFilters.clear()
+        android.defaultConfig.ndk.abiFilters.add('arm64-v8a')
+    }
+}
