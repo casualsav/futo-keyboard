@@ -48,4 +48,17 @@ class SpokenPunctuationTest {
             SpokenPunctuation.apply("It's 3.5 km, at 6:30 - a well-known route."),
         )
     }
+
+    @Test
+    fun commaHeardAsKamaBecomesAComma() {
+        assertEquals(
+            "it starts transcribing, and we shortened it, how long",
+            SpokenPunctuation.apply("it starts transcribing Kama and we shortened it kama how long"),
+        )
+    }
+
+    @Test
+    fun comaAndKarmaStayWords() {
+        assertEquals("good karma after the coma", SpokenPunctuation.apply("good karma after the coma"))
+    }
 }

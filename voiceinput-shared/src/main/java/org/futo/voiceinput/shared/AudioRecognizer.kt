@@ -78,8 +78,8 @@ private fun getRecordingDeviceKind(type: Int): String {
 }
 
 // Auto-stop ends the recording after this many 30 ms VAD frames of silence once speech was heard:
-// 33 frames is about one second (upstream waits 66, about two).
-private const val AUTO_STOP_SILENCE_FRAMES = 33
+// 50 frames is about one and a half seconds (upstream waits 66, about two).
+private const val AUTO_STOP_SILENCE_FRAMES = 50
 
 data class RecordingSettings(
     val preferBluetoothMic: Boolean,
