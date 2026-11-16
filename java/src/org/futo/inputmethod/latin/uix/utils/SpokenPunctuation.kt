@@ -17,6 +17,9 @@ object SpokenPunctuation {
         "semicolon" to ";",
         "period" to ".",
         "comma" to ",",
+        // Whisper often hears "comma" as "Kama"; "coma" and "karma" are real words, so they stay words.
+        "kama" to ",",
+        "kamma" to ",",
         "colon" to ":",
     )
 
