@@ -12,6 +12,7 @@ import org.futo.inputmethod.latin.uix.ANIMATE_BUBBLE
 import org.futo.inputmethod.latin.uix.AUDIO_FOCUS
 import org.futo.inputmethod.latin.uix.CAN_EXPAND_SPACE
 import org.futo.inputmethod.latin.uix.DISALLOW_SYMBOLS
+import org.futo.inputmethod.latin.uix.SPOKEN_PUNCTUATION_ONLY
 import org.futo.inputmethod.latin.uix.ENABLE_SOUND
 import org.futo.inputmethod.latin.uix.PREFER_BLUETOOTH
 import org.futo.inputmethod.latin.uix.SYSTEM_VOICE_INPUT_PACKAGE
@@ -152,6 +153,12 @@ val VoiceInputMenu = UserSettingsMenu(
         userSettingToggleDataStore(
             title = R.string.voice_input_settings_suppress_symbols,
             setting = DISALLOW_SYMBOLS
+        ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+
+        userSettingToggleDataStore(
+            title = R.string.voice_input_settings_spoken_punctuation_only,
+            subtitle = R.string.voice_input_settings_spoken_punctuation_only_subtitle,
+            setting = SPOKEN_PUNCTUATION_ONLY
         ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
 
         userSettingToggleDataStore(
