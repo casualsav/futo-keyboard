@@ -46,6 +46,7 @@ import org.futo.inputmethod.latin.uix.getSetting
 import org.futo.inputmethod.latin.uix.setSetting
 import org.futo.inputmethod.latin.uix.settings.SettingsActivity
 import org.futo.inputmethod.latin.uix.utils.ModelOutputSanitizer
+import org.futo.inputmethod.latin.uix.utils.VoiceGlossary
 import org.futo.inputmethod.latin.xlm.UserDictionaryObserver
 import org.futo.inputmethod.updates.openURI
 import org.futo.voiceinput.shared.ModelDoesNotExistException
@@ -136,11 +137,15 @@ private class VoiceInputActionWindow(
         val primaryModel = model
         val languageSpecificModels = mutableMapOf<Language, ModelLoader>()
         val allowedLanguages = locales.mapNotNull { getLanguageFromWhisperString(it.language) }.toSet()
-        val glossary = if(usePersonalDict) {
+        val dictionaryWords = if(usePersonalDict) {
             state.userDictionaryObserver.getWords(locales).filter { it.shortcut.isNullOrEmpty() }.map { it.word }
         } else {
             emptyList()
         }
+        val glossary = VoiceGlossary.select(
+            dictionaryWords = dictionaryWords,
+            alwaysInclude = if(spokenPunctuationOnly) VoiceGlossary.SPOKEN_PUNCTUATION_WORDS else emptyList()
+        )
 
         shouldPlaySounds = enableSound
 
