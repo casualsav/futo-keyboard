@@ -51,13 +51,38 @@ object SpokenPunctuation {
         }
         val stripped = MODEL_PUNCTUATION_RE.replace(unCapitalised, "").replace(MULTI_SPACE_RE, " ").trim()
         val marked = SPOKEN_RE.replace(stripped) { m ->
-            " " + MARK_BY_WORDS.getValue(m.groupValues[1].lowercase().split(Regex("""\s+""")).joinToString(" "))
+            val words = m.groupValues[1].lowercase().split(Regex("""\s+""")).joinToString(" ")
+            if (isUsedAsAWord(stripped, m.range)) m.value
+            else " " + MARK_BY_WORDS.getValue(words)
         }
         return marked
             .replace(SPACE_BEFORE_MARK_RE, "$1")
             .replace(MULTI_SPACE_RE, " ")
             .trim()
             .replace(SENTENCE_START_RE) { it.groupValues[1] + it.groupValues[2].uppercase() }
+    }
+
+    /**
+     * Words that, right before a punctuation word, show it is meant as a noun ("a period of
+     * time", "my colon", "add the comma"), not as a mark.
+     */
+    private val WORD_BEFORE_A_NOUN = setOf(
+        "a", "an", "the", "this", "that", "these", "those", "each", "every", "any", "no", "one",
+        "my", "your", "his", "her", "its", "our", "their", "whose", "which", "what", "per",
+        // Common compounds: "trial period", "grace period", "waiting period" and the like.
+        "trial", "grace", "waiting", "billing", "notice", "cooling", "probation", "probationary", "free",
+    )
+
+    private val WORD_RE = Regex("""[\p{L}\p{N}']+""")
+
+    /**
+     * True when the punctuation word at [range] of [text] reads as an ordinary word: it follows an
+     * article, possessive or compound word from [WORD_BEFORE_A_NOUN], or it is followed by "of".
+     */
+    private fun isUsedAsAWord(text: String, range: IntRange): Boolean {
+        val before = WORD_RE.findAll(text.substring(0, range.first)).lastOrNull()?.value?.lowercase()
+        val after = WORD_RE.find(text, range.last + 1)?.value?.lowercase()
+        return (before != null && before in WORD_BEFORE_A_NOUN) || after == "of"
     }
 
     /** [word] with its first letter lowercased, unless it is "I", a contraction of it, or all caps. */
