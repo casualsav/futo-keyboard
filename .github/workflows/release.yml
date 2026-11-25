@@ -3,7 +3,8 @@ name: Release
 
 # Builds the unstable release APK on the owner's own runner on the vnic server (never GitHub's
 # machines) and publishes it as the next "personal-N" GitHub release. Runs on every landing on
-# main, or by hand.
+# main, or by hand. A pull request that changes the release setup runs the same signed build as
+# a dry run, without publishing, so the signing is proven before it lands.
 #
 # Signing: with the owner's private key, which lives only on the runner at
 # /home/gh-futo/keys/release.jks (alias futo); its password is the SIGNING_PASSWORD secret. The
@@ -14,9 +15,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/actions/**
+      - .github/scripts/**
+      - .github/arm64-only.gradle
+      - build.gradle
 
 concurrency:
-  group: release
+  group: release-${{ github.event_name }}
   cancel-in-progress: false
 
 permissions:
@@ -111,6 +119,7 @@ jobs:
           echo "path=$apk" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           body="$(git log -1 --format=%s)
 
