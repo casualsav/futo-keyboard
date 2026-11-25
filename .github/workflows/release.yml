@@ -1,0 +1,64 @@
+# cost: about 30 machine-minutes per landing on main, on the owner's runner
+name: Release
+
+# Builds the unstable release APK on the owner's own runner on the vnic server (never GitHub's
+# machines) and publishes it as the next "personal-N" GitHub release. Runs on every landing on
+# main, or by hand.
+#
+# Signing: with no keystore.properties in the repo, the release build signs with the debug key
+# in java/shared.keystore, the same key as the earlier personal builds, so it installs over them.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Linux ARM64 with JDK 17 and the Android SDK (ANDROID_HOME) preinstalled.
+    runs-on: [self-hosted, futo]
+    timeout-minutes: 150
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/prepare
+
+      - name: Pick the release number
+        id: number
+        run: echo "n=$(python3 -I .github/scripts/publish-release.py next-number)" >> "$GITHUB_OUTPUT"
+
+      # Only arm64 is built (.github/arm64-only.gradle). The version code is 1000 + N, so a
+      # release always installs over the debug builds from pull requests (which use the run number).
+      - name: Release APK
+        env:
+          N: ${{ steps.number.outputs.n }}
+        run: |
+          export VERSION_CODE=$((1000 + N)) VERSION_NAME="personal-$N"
+          ./gradlew --no-daemon --init-script .github/arm64-only.gradle assembleUnstableRelease
+
+      - name: Check the APK is signed
+        id: apk
+        run: |
+          apk=$(ls build/outputs/apk/unstable/release/*.apk | grep -v -- '-unsigned' | head -1)
+          if [ -z "$apk" ]; then echo "No signed release APK was built"; ls build/outputs/apk/unstable/release/; exit 1; fi
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | head -3
+          echo "path=$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        run: |
+          body="$(git log -1 --format=%s)
+
+          Release build. Installs over the previous personal build."
+          python3 -I .github/scripts/publish-release.py publish "${{ steps.number.outputs.n }}" "${{ steps.apk.outputs.path }}" "$body"
