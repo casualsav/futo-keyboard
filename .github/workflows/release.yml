@@ -29,6 +29,18 @@ jobs:
       JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # This runner keeps its workspace between jobs. The git-lfs hooks and filters that the last
+      # job set up would make checkout call git-lfs, which only exists inside a job, so clear them.
+      - name: Clear git-lfs setup left by an earlier job
+        run: |
+          [ -d .git ] || exit 0
+          for cfg in .git/config $(find .git/modules -type f -name config -execdir test -f HEAD \; -print 2>/dev/null); do
+            git config --file "$cfg" --remove-section filter.lfs 2>/dev/null || true
+            git config --file "$cfg" --remove-section lfs 2>/dev/null || true
+          done
+          find .git -path '*/hooks/*' -type f \( -name post-checkout -o -name post-commit -o -name post-merge -o -name pre-push \) \
+            -exec grep -l 'git lfs' {} + | xargs -r rm -f
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
