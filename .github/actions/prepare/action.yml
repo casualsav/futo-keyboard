@@ -2,7 +2,7 @@ name: Prepare the FUTO Keyboard build
 description: >
   Run after checkout with submodules on the self-hosted vnic runner (Linux ARM64). Fetches
   git-lfs into the job's temp directory, pulls the LFS files in every submodule, checks the
-  Gradle wrapper and shows the toolchain the build will use.
+  Gradle wrapper, gives the emulated x86-64 NDK the zlib it needs and shows the toolchain.
 
 runs:
   using: composite
@@ -29,6 +29,21 @@ runs:
 
     - name: Check the Gradle wrapper is a real Gradle release
       uses: gradle/actions/wrapper-validation@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+
+    # The NDK's compiler is an x86-64 program; on this ARM64 runner it runs under emulation and
+    # needs an x86-64 zlib, which the runner lacks. A pinned Ubuntu package is unpacked into the
+    # job's temp directory (python for the download, as there is no curl). ARM64 programs skip
+    # these x86-64 libraries, so putting them on LD_LIBRARY_PATH affects only the NDK.
+    - name: x86-64 zlib for the NDK compiler
+      shell: bash
+      run: |
+        d="$RUNNER_TEMP/x86-64-zlib"
+        f=zlib1g_1.3.dfsg-3.1ubuntu2.3_amd64.deb
+        python3 -I -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' \
+          "http://archive.ubuntu.com/ubuntu/pool/main/z/zlib/$f" "$RUNNER_TEMP/$f"
+        echo "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9  $RUNNER_TEMP/$f" | sha256sum -c -
+        dpkg-deb -x "$RUNNER_TEMP/$f" "$d"
+        echo "LD_LIBRARY_PATH=$d/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
     - name: Show the toolchain
       shell: bash
