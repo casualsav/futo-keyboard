@@ -35,6 +35,7 @@ import org.futo.inputmethod.latin.uix.CloseResult
 import org.futo.inputmethod.latin.uix.DISALLOW_SYMBOLS
 import org.futo.inputmethod.latin.uix.SPOKEN_PUNCTUATION_ONLY
 import org.futo.inputmethod.latin.uix.LIVE_VOICE_TYPING
+import org.futo.inputmethod.latin.uix.SUPPRESS_MIC_NOISE
 import org.futo.inputmethod.latin.uix.utils.SpokenPunctuation
 import org.futo.voiceinput.shared.LiveTranscriptionSettings
 import org.futo.inputmethod.latin.uix.VoiceEditTracker
@@ -182,7 +183,8 @@ private class VoiceInputActionWindow(
                 preferBluetoothMic = useBluetoothAudio,
                 requestAudioFocus = requestAudioFocus,
                 canExpandSpace = canExpandSpace,
-                useVADAutoStop = useVAD
+                useVADAutoStop = useVAD,
+                suppressNoise = context.getSetting(SUPPRESS_MIC_NOISE)
             ),
             liveTranscription = if (liveTyping) LiveTranscriptionSettings(
                 convert = { if (spokenPunctuationOnly) SpokenPunctuation.apply(it) else it }

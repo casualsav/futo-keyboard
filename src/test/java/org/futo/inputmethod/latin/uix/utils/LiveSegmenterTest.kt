@@ -69,6 +69,21 @@ class LiveSegmenterTest {
     }
 
     @Test
+    fun aNameAfterACommaKeepsItsCapital() {
+        val s = spoken()
+        s.onPiece("Thanks comma")
+        s.onPiece("Sal will send it period")
+        assertEquals("Thanks, Sal will send it.", s.committed)
+    }
+
+    @Test
+    fun commonWordsAfterACommaAreLowercased() {
+        assertEquals("Yes, then we left", LiveSegmenter.join("Yes,", "Then we left"))
+        assertEquals("Yes, it's fine", LiveSegmenter.join("Yes,", "It's fine"))
+        assertEquals("Yes, Moto said", LiveSegmenter.join("Yes,", "Moto said"))
+    }
+
+    @Test
     fun finalPieceKeepsEverything() {
         val s = spoken()
         s.onPiece("First part period. Second")
