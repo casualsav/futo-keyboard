@@ -51,16 +51,20 @@ object ModelOutputSanitizer {
             .split("\n")
             .firstOrNull() ?: ""
 
-        // Whisper tends to generate ellipsis at the end of phrases/sentences more often than appropriate. Which isn't so bad if it's at the very end but frustrating when inserting something inside of a sentence.
-        if (trimmed.endsWith("...") && !after.isEmpty()) {
-            trimmed = trimmed.dropLast(3)
-        }
+        // In spoken-punctuation mode every mark left was said aloud, so it stays even when
+        // dictating in front of existing text. The trims below are for marks the model wrote.
+        if (!spokenPunctuationOnly) {
+            // Whisper tends to generate ellipsis at the end of phrases/sentences more often than appropriate. Which isn't so bad if it's at the very end but frustrating when inserting something inside of a sentence.
+            if (trimmed.endsWith("...") && !after.isEmpty()) {
+                trimmed = trimmed.dropLast(3)
+            }
 
-        if (trimmed.isEmpty()) return ""
+            if (trimmed.isEmpty()) return ""
 
-        // Punctuation
-        if (trimmed.last().isPunctuation() && !after.isEmpty()) {
-            trimmed = trimmed.dropLast(1)
+            // Punctuation
+            if (trimmed.last().isPunctuation() && !after.isEmpty()) {
+                trimmed = trimmed.dropLast(1)
+            }
         }
 
         if (trimmed.isEmpty()) return ""

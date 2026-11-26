@@ -61,4 +61,20 @@ class SpokenPunctuationTest {
     fun comaAndKarmaStayWords() {
         assertEquals("good karma after the coma", SpokenPunctuation.apply("good karma after the coma"))
     }
+
+    @Test
+    fun punctuationWordsUsedAsNounsStayWords() {
+        assertEquals("It was a period of time", SpokenPunctuation.apply("It was a period of time."))
+        assertEquals("The free trial period ends Monday", SpokenPunctuation.apply("The free trial period ends Monday."))
+        assertEquals("My colon is fine", SpokenPunctuation.apply("My colon is fine."))
+        assertEquals("Is there a question mark at the end", SpokenPunctuation.apply("Is there a question mark at the end?"))
+        assertEquals("A comma goes here", SpokenPunctuation.apply("A comma goes here."))
+    }
+
+    @Test
+    fun punctuationWordsSaidAsCommandsStillBecomeMarks() {
+        assertEquals("see you then. Bye", SpokenPunctuation.apply("see you then period bye"))
+        assertEquals("first, second", SpokenPunctuation.apply("first comma second"))
+        assertEquals("Are you coming?", SpokenPunctuation.apply("Are you coming question mark"))
+    }
 }
