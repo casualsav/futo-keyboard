@@ -12,6 +12,7 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.MicrophoneDirection
+import android.media.audiofx.NoiseSuppressor
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -111,7 +112,10 @@ data class RecordingSettings(
     val preferBluetoothMic: Boolean,
     val requestAudioFocus: Boolean,
     val canExpandSpace: Boolean,
-    val useVADAutoStop: Boolean
+    val useVADAutoStop: Boolean,
+    // Android's own noise suppression on the mic (often done by the phone's audio chip, so it
+    // costs little battery). Used only where the phone offers it.
+    val suppressNoise: Boolean = false
 )
 
 data class AudioRecognizerSettings(
@@ -132,6 +136,7 @@ class AudioRecognizer(
 ) {
     private var isRecording = false
     private var recorder: AudioRecord? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
 
     private val modelRunner = MultiModelRunner(modelManager)
 
@@ -267,6 +272,7 @@ class AudioRecognizer(
 
         recorder?.release()
         recorder = null
+        releaseNoiseSuppressor()
 
         modelJob?.cancel()
         liveJob?.cancel()
@@ -336,7 +342,31 @@ class AudioRecognizer(
             recorder.setPreferredMicrophoneDirection(MicrophoneDirection.MIC_DIRECTION_TOWARDS_USER)
         }
 
+        attachNoiseSuppressor(recorder)
+
         return recorder
+    }
+
+    private fun attachNoiseSuppressor(recorder: AudioRecord) {
+        releaseNoiseSuppressor()
+        if (!settings.recordingConfiguration.suppressNoise) return
+        try {
+            if (!NoiseSuppressor.isAvailable()) return
+            noiseSuppressor = NoiseSuppressor.create(recorder.audioSessionId)?.also {
+                it.enabled = true
+            }
+        } catch (e: Exception) {
+            // Some phones list the effect but refuse it; record without it.
+            Log.w("AudioRecognizer", "Noise suppressor not available: $e")
+            noiseSuppressor = null
+        }
+    }
+
+    private fun releaseNoiseSuppressor() {
+        try {
+            noiseSuppressor?.release()
+        } catch (_: Exception) {}
+        noiseSuppressor = null
     }
 
     private suspend fun preloadModels() {

@@ -85,6 +85,42 @@ class LiveSegmenter(private val convert: (String) -> String) {
     companion object {
         private const val MARKS = ".,;:!?"
         private val SENTENCE_END = Regex("""[.!?]["”»)\]]*$""")
+
+        /**
+         * Common words that Whisper capitalises only because they start a piece. After a comma
+         * they're lowercased; any other word keeps Whisper's capital, so a name ("Sal") or a
+         * place stays capitalised.
+         */
+        private val COMMON_WORDS = setOf(
+            "a", "about", "above", "actually", "after", "again", "against", "all", "almost",
+            "already", "also", "although", "always", "am", "an", "and", "another", "any",
+            "anybody", "anyone", "anything", "anyway", "are", "around", "as", "ask", "asked", "at",
+            "away", "back", "be", "because", "been", "before", "being", "below", "better",
+            "between", "both", "bought", "but", "buy", "by", "call", "called", "came", "can",
+            "can't", "cause", "come", "could", "couldn't", "day", "did", "didn't", "do", "does",
+            "doesn't", "doing", "don't", "done", "down", "during", "each", "either", "else",
+            "even", "ever", "every", "everyone", "everything", "few", "find", "first", "for",
+            "from", "get", "gets", "getting", "give", "go", "goes", "going", "gone", "good", "got",
+            "great", "had", "has", "hasn't", "have", "haven't", "having", "he", "he's", "her",
+            "here", "hers", "him", "his", "how", "however", "if", "in", "into", "is", "isn't",
+            "it", "it's", "its", "just", "keep", "know", "last", "later", "least", "less", "let",
+            "let's", "like", "little", "look", "lot", "made", "make", "many", "may", "maybe", "me",
+            "might", "mine", "more", "most", "much", "must", "my", "need", "never", "new", "next",
+            "no", "nobody", "none", "nor", "not", "nothing", "now", "of", "off", "often", "oh",
+            "ok", "okay", "on", "once", "one", "only", "or", "other", "others", "our", "ours",
+            "out", "over", "own", "please", "plus", "pretty", "put", "quite", "rather", "really",
+            "right", "said", "same", "saw", "say", "says", "see", "seem", "she", "she's", "should",
+            "shouldn't", "since", "so", "some", "someone", "something", "sometimes", "soon",
+            "still", "such", "sure", "take", "tell", "than", "thank", "thanks", "that", "that's",
+            "the", "their", "theirs", "them", "then", "there", "there's", "these", "they",
+            "they're", "thing", "things", "think", "this", "those", "though", "thought", "through",
+            "time", "to", "today", "together", "tomorrow", "too", "took", "two", "under", "until",
+            "up", "us", "very", "was", "wasn't", "way", "we", "we're", "well", "went", "were",
+            "weren't", "what", "what's", "when", "where", "whether", "which", "while", "who",
+            "whom", "whose", "why", "will", "with", "without", "won't", "would", "wouldn't",
+            "yeah", "yes", "yesterday", "yet", "you", "you're", "your", "yours"
+        )
+        private val FIRST_WORD = Regex("""^[\p{L}'’]+""")
         private val PRONOUN_I = Regex("""^I(?:'(?:m|ll|ve|d))?\b""")
 
         /** A mark the user said: not `.`, `,` or `:` between two digits (3.5, 6,000, 6:30). */
@@ -123,10 +159,15 @@ class LiveSegmenter(private val convert: (String) -> String) {
         }
 
         /**
-         * [next] after [previous] with one space, capitalised after a sentence end and
-         * lowercased otherwise (Whisper capitalises the start of every piece), keeping "I",
-         * its contractions and words in all caps.
+         * [next] after [previous] with one space, capitalised after a sentence end. Otherwise a
+         * common word is lowercased (Whisper capitalises the start of every piece), and "I", its
+         * contractions, words in all caps and any other word (likely a name) keep their capital.
          */
+        private fun isCommonWord(text: String): Boolean {
+            val word = FIRST_WORD.find(text)?.value?.lowercase()?.replace('’', '\'') ?: return false
+            return word in COMMON_WORDS
+        }
+
         fun join(previous: String, next: String): String {
             val a = previous.trim()
             val b = next.trim()
@@ -136,7 +177,8 @@ class LiveSegmenter(private val convert: (String) -> String) {
                 SENTENCE_END.containsMatchIn(a) -> b.replaceFirstChar { it.uppercaseChar() }
                 PRONOUN_I.containsMatchIn(b) -> b
                 b.length >= 2 && b[0].isUpperCase() && b[1].isUpperCase() -> b
-                else -> b.replaceFirstChar { it.lowercaseChar() }
+                isCommonWord(b) -> b.replaceFirstChar { it.lowercaseChar() }
+                else -> b
             }
             return if (fixed.first() in MARKS) a + fixed else "$a $fixed"
         }

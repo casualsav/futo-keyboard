@@ -44,6 +44,12 @@ val CAN_EXPAND_SPACE = SettingsKey(
     default = true
 )
 
+// Android's built-in noise suppression on the mic while voice typing, where the phone offers it.
+val SUPPRESS_MIC_NOISE = SettingsKey(
+    key = booleanPreferencesKey("suppress_mic_noise"),
+    default = true
+)
+
 val AUDIO_FOCUS = SettingsKey(
     key = booleanPreferencesKey("request_audio_focus"),
     default = true

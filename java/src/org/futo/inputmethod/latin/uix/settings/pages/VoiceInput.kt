@@ -27,6 +27,7 @@ import org.futo.inputmethod.latin.uix.USE_SYSTEM_VOICE_INPUT
 import org.futo.inputmethod.latin.uix.USE_VAD_AUTOSTOP
 import org.futo.inputmethod.latin.uix.LEARN_FROM_VOICE_EDITS
 import org.futo.inputmethod.latin.uix.LIVE_VOICE_TYPING
+import org.futo.inputmethod.latin.uix.SUPPRESS_MIC_NOISE
 import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.settings.DropDownPickerSettingItem
 import org.futo.inputmethod.latin.uix.settings.NavigationItemStyle
@@ -152,6 +153,12 @@ val VoiceInputMenu = UserSettingsMenu(
             title = R.string.voice_input_settings_use_bluetooth_mic,
             subtitle = R.string.voice_input_settings_use_bluetooth_mic_subtitle,
             setting = PREFER_BLUETOOTH
+        ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+
+        userSettingToggleDataStore(
+            title = R.string.voice_input_settings_suppress_noise,
+            subtitle = R.string.voice_input_settings_suppress_noise_subtitle,
+            setting = SUPPRESS_MIC_NOISE
         ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
 
         userSettingToggleDataStore(
