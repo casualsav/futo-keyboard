@@ -595,6 +595,15 @@
     <string name="voice_input_settings_suppress_symbols">Suppress symbols</string>
     <string name="voice_input_settings_spoken_punctuation_only">Spoken punctuation only</string>
     <string name="voice_input_settings_spoken_punctuation_only_subtitle">Removes the punctuation the voice model adds on its own, so only punctuation you say (\"comma\", \"period\", \"question mark\") is typed</string>
+    <string name="voice_input_settings_learn_from_edits">Learn from my edits</string>
+    <string name="voice_input_settings_learn_from_edits_subtitle">When you fix the same voice typing mistake twice, the fix is applied from then on. What it learns stays on this phone and is left out of cloud backups</string>
+    <string name="voice_input_settings_learned_fixes">Learned fixes</string>
+    <string name="voice_input_settings_learned_fixes_none">Nothing learned yet. Tap to forget what has been learned</string>
+    <string name="voice_input_settings_learned_fixes_summary">%1$d fixes learned. You edited %2$d%% of words in your last %3$d voice inputs. Tap to forget them</string>
+    <string name="voice_input_settings_learned_fixes_forget_title">Forget learned fixes?</string>
+    <string name="voice_input_settings_learned_fixes_forget_text">Voice typing goes back to typing words as the model hears them, and the edit history is cleared.</string>
+    <string name="voice_input_settings_learned_fixes_forget">Forget</string>
+    <string name="voice_input_settings_learned_fixes_keep">Keep</string>
     <string name="voice_input_settings_suppress_symbols_subtitle">Prevent voice input from outputting symbols</string>
     <string name="voice_input_settings_long_form">Long-form voice input</string>
     <string name="voice_input_settings_long_form_subtitle">If disabled, voice input will auto-stop after 30 seconds.</string>

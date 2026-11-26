@@ -34,6 +34,7 @@ import org.futo.inputmethod.latin.uix.CAN_EXPAND_SPACE
 import org.futo.inputmethod.latin.uix.CloseResult
 import org.futo.inputmethod.latin.uix.DISALLOW_SYMBOLS
 import org.futo.inputmethod.latin.uix.SPOKEN_PUNCTUATION_ONLY
+import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.ENABLE_SOUND
 import org.futo.inputmethod.latin.uix.KeyboardManagerForAction
 import org.futo.inputmethod.latin.uix.PREFER_BLUETOOTH
@@ -142,8 +143,11 @@ private class VoiceInputActionWindow(
         } else {
             emptyList()
         }
+        // Words from fixes learned from the user's own edits come first: they're the words
+        // Whisper has been getting wrong.
+        val learnedWords = VoiceEditTracker.learnedWords(context)
         val glossary = VoiceGlossary.select(
-            dictionaryWords = dictionaryWords,
+            dictionaryWords = learnedWords + dictionaryWords,
             alwaysInclude = if(spokenPunctuationOnly) VoiceGlossary.SPOKEN_PUNCTUATION_WORDS else emptyList()
         )
 
@@ -274,8 +278,13 @@ private class VoiceInputActionWindow(
         wasFinished = true
 
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly)
+            val sanitized = VoiceEditTracker.applyLearned(context,
+                ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly))
             inputTransaction.commit(sanitized)
+            inputTransaction.learningContext?.let {
+                VoiceEditTracker.onVoiceTyped(context, manager.getLifecycleScope(), sanitized,
+                    before = it.beforeCursor?.toString() ?: "", after = it.afterCursor?.toString() ?: "")
+            }
             manager.announce(result)
             manager.closeActionWindow()
         }
@@ -283,7 +292,8 @@ private class VoiceInputActionWindow(
 
     override fun partialResult(result: String) {
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly)
+            val sanitized = VoiceEditTracker.applyLearned(context,
+                ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly))
             inputTransaction.updatePartial(sanitized)
         }
     }

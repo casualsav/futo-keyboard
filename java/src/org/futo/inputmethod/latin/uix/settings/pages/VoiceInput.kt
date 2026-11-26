@@ -1,6 +1,12 @@
 package org.futo.inputmethod.latin.uix.settings.pages
 
 import android.view.inputmethod.InputMethodManager
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -19,8 +25,11 @@ import org.futo.inputmethod.latin.uix.SYSTEM_VOICE_INPUT_PACKAGE
 import org.futo.inputmethod.latin.uix.USE_PERSONAL_DICT
 import org.futo.inputmethod.latin.uix.USE_SYSTEM_VOICE_INPUT
 import org.futo.inputmethod.latin.uix.USE_VAD_AUTOSTOP
+import org.futo.inputmethod.latin.uix.LEARN_FROM_VOICE_EDITS
+import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.settings.DropDownPickerSettingItem
 import org.futo.inputmethod.latin.uix.settings.NavigationItemStyle
+import org.futo.inputmethod.latin.uix.settings.SettingItem
 import org.futo.inputmethod.latin.uix.settings.Tip
 import org.futo.inputmethod.latin.uix.settings.UserSetting
 import org.futo.inputmethod.latin.uix.settings.UserSettingsMenu
@@ -162,6 +171,19 @@ val VoiceInputMenu = UserSettingsMenu(
         ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
 
         userSettingToggleDataStore(
+            title = R.string.voice_input_settings_learn_from_edits,
+            subtitle = R.string.voice_input_settings_learn_from_edits_subtitle,
+            setting = LEARN_FROM_VOICE_EDITS
+        ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+
+        UserSetting(
+            name = R.string.voice_input_settings_learned_fixes,
+            visibilityCheck = visibilityCheckNotSystemVoiceInput,
+        ) {
+            LearnedVoiceFixesItem()
+        },
+
+        userSettingToggleDataStore(
             title = R.string.voice_input_settings_long_form,
             subtitle = R.string.voice_input_settings_long_form_subtitle,
             setting = CAN_EXPAND_SPACE
@@ -188,3 +210,46 @@ val VoiceInputMenu = UserSettingsMenu(
         //}
     )
 )
+
+@Composable
+private fun LearnedVoiceFixesItem() {
+    val context = LocalContext.current
+    var summary by remember { mutableStateOf(VoiceEditTracker.summary(context)) }
+    var confirmForget by remember { mutableStateOf(false) }
+
+    val (fixes, changedWords, words, inputs) = summary
+    SettingItem(
+        title = stringResource(R.string.voice_input_settings_learned_fixes),
+        subtitle = if (inputs == 0) {
+            stringResource(R.string.voice_input_settings_learned_fixes_none)
+        } else {
+            stringResource(
+                R.string.voice_input_settings_learned_fixes_summary,
+                fixes,
+                if (words > 0) changedWords * 100 / words else 0,
+                inputs
+            )
+        },
+        onClick = { confirmForget = true }
+    ) { }
+
+    if (confirmForget) {
+        AlertDialog(
+            onDismissRequest = { confirmForget = false },
+            title = { Text(stringResource(R.string.voice_input_settings_learned_fixes_forget_title)) },
+            text = { Text(stringResource(R.string.voice_input_settings_learned_fixes_forget_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    VoiceEditTracker.forget(context)
+                    summary = VoiceEditTracker.summary(context)
+                    confirmForget = false
+                }) { Text(stringResource(R.string.voice_input_settings_learned_fixes_forget)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmForget = false }) {
+                    Text(stringResource(R.string.voice_input_settings_learned_fixes_keep))
+                }
+            }
+        )
+    }
+}

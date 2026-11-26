@@ -28,6 +28,7 @@ import org.futo.inputmethod.latin.uix.dataStore
 import org.futo.inputmethod.latin.uix.deferSetSetting
 import org.futo.inputmethod.latin.uix.getSetting
 import org.futo.inputmethod.latin.uix.isDirectBootUnlocked
+import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.v2keyboard.KeyboardLayoutSetV2
 
 enum class IMEMessage {
@@ -139,6 +140,7 @@ class IMEManager(
         val ime = getActiveIME(settings.current)
         inInput = false
         ime.onFinishInput()
+        VoiceEditTracker.finish(helper.context, service.lifecycleScope)
 
         currentActionInputTransactionIME?.let { endInputTransaction(it) }
     }
@@ -277,6 +279,7 @@ class IMEManager(
         composingSpanEnd: Int
     ) {
         val sel = Selection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, composingSpanStart, composingSpanEnd, currHash())
+        VoiceEditTracker.onSelectionChanged(helper.context, service.lifecycleScope) { helper.getCurrentInputConnection() }
         pendingUpdateSelection?.first?.cancel()
         pendingUpdateSelection = service.lifecycleScope.launch {
             delay(20L)
