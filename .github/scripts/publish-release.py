@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Publishes a "personal-N" GitHub release with one APK attached, like the earlier hand-made ones.
 
+With RELEASE_PREFIX=live it publishes "live-N" instead (the live voice typing test app), as a
+pre-release that is never marked as the latest release.
+
 Usage:
   publish-release.py next-number            prints N, one more than the highest personal-N tag
   publish-release.py publish N APK BODY     creates release personal-N on GITHUB_SHA, uploads APK
@@ -19,6 +22,9 @@ import urllib.request
 API = "https://api.github.com"
 REPO = os.environ["GITHUB_REPOSITORY"]
 TOKEN = os.environ["GITHUB_TOKEN"]
+PREFIX = os.environ.get("RELEASE_PREFIX", "personal")
+if PREFIX not in ("personal", "live"):
+    sys.exit(f"Unknown RELEASE_PREFIX {PREFIX!r}")
 
 
 def call(method, url, data=None, content_type="application/json"):
@@ -42,7 +48,7 @@ def next_number():
         releases = call("GET", f"{API}/repos/{REPO}/releases?per_page=100&page={page}")
         names = [t["name"] for t in tags] + [r["tag_name"] for r in releases]
         for name in names:
-            m = re.fullmatch(r"personal-(\d+)", name)
+            m = re.fullmatch(re.escape(PREFIX) + r"-(\d+)", name)
             if m:
                 highest = max(highest, int(m.group(1)))
         if len(tags) < 100 and len(releases) < 100:
@@ -51,13 +57,17 @@ def next_number():
 
 
 def publish(n, apk, body):
-    release = call("POST", f"{API}/repos/{REPO}/releases", json.dumps({
-        "tag_name": f"personal-{n}",
+    fields = {
+        "tag_name": f"{PREFIX}-{n}",
         "target_commitish": os.environ["GITHUB_SHA"],
-        "name": f"Personal build {n}",
+        "name": f"Personal build {n}" if PREFIX == "personal" else f"Live typing test build {n}",
         "body": body,
-    }).encode())
-    name = f"futo-keyboard-personal-{n}.apk"
+    }
+    if PREFIX == "live":
+        fields["prerelease"] = True
+        fields["make_latest"] = "false"
+    release = call("POST", f"{API}/repos/{REPO}/releases", json.dumps(fields).encode())
+    name = f"futo-keyboard-{PREFIX}-{n}.apk"
     upload = release["upload_url"].split("{")[0] + "?" + urllib.parse.urlencode({"name": name})
     with open(apk, "rb") as f:
         asset = call("POST", upload, f.read(), "application/vnd.android.package-archive")

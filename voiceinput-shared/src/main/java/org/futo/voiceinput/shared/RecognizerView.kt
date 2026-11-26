@@ -38,7 +38,8 @@ data class RecognizerViewSettings(
 
     val modelRunConfiguration: MultiModelRunConfiguration,
     val decodingConfiguration: DecodingConfiguration,
-    val recordingConfiguration: RecordingSettings
+    val recordingConfiguration: RecordingSettings,
+    val liveTranscription: LiveTranscriptionSettings? = null
 )
 
 private val VerboseAnnotations = hashMapOf(
@@ -67,6 +68,9 @@ interface RecognizerViewListener {
     fun finished(result: String)
 
     fun partialResult(result: String)
+
+    /** Live voice typing; see [AudioRecognizerListener.liveText]. */
+    fun liveText(committed: String, display: String) {}
 
     // Return true if a permission modal was shown, otherwise return false
     fun requestPermission(onGranted: () -> Unit, onRejected: () -> Unit): Boolean
@@ -186,6 +190,10 @@ class RecognizerView(
         }
 
 
+        override fun liveText(committed: String, display: String) {
+            listener.liveText(committed, display)
+        }
+
         override fun decodingStatus(status: InferenceState) {
             val text = context.getString(
                 when (settings.shouldShowVerboseFeedback) {
@@ -245,7 +253,8 @@ class RecognizerView(
         settings = AudioRecognizerSettings(
             modelRunConfiguration = settings.modelRunConfiguration,
             decodingConfiguration = settings.decodingConfiguration,
-            recordingConfiguration = settings.recordingConfiguration
+            recordingConfiguration = settings.recordingConfiguration,
+            liveTranscription = settings.liveTranscription
         )
     )
 

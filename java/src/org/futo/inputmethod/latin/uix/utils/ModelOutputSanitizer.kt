@@ -33,8 +33,14 @@ object ModelOutputSanitizer {
 
     @JvmStatic
     @JvmOverloads
-    fun sanitize(result: String, textContext: TextContext?, spokenPunctuationOnly: Boolean = false): String {
-        val text = if (spokenPunctuationOnly) SpokenPunctuation.apply(result) else result
+    fun sanitize(
+        result: String,
+        textContext: TextContext?,
+        spokenPunctuationOnly: Boolean = false,
+        // Live voice typing converts each piece as it comes; converting again would remove the marks.
+        alreadyConverted: Boolean = false
+    ): String {
+        val text = if (spokenPunctuationOnly && !alreadyConverted) SpokenPunctuation.apply(result) else result
         if (textContext == null) {
             return text
         }

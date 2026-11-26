@@ -2,7 +2,11 @@
 name: Release
 
 # Builds the unstable release APK on GitHub's ubuntu-latest machines and publishes it as the
-# next "personal-N" GitHub release. Runs on every landing on main, or by hand. A pull request
+# next "personal-N" GitHub release. Runs on every landing on main, or by hand.
+#
+# On the "live" branch (the live voice typing test app, "FUTO Keyboard Live") it publishes
+# "live-N" instead, marked as a pre-release and never as the latest release, so the personal-N
+# line and the Releases page's "Latest" stay as they are. A pull request
 # from this repository that changes the release setup runs the same signed build as a dry run,
 # without publishing, so the signing is proven before it lands. Pull requests from forks get no
 # secrets, so their dry run stops at the signing step.
@@ -14,7 +18,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, live]
   workflow_dispatch:
   pull_request:
     paths:
@@ -25,7 +29,7 @@ on:
       - build.gradle
 
 concurrency:
-  group: release-${{ github.event_name }}
+  group: release-${{ github.event_name }}-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -38,6 +42,7 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SIGNING_ALIAS: futo
+      RELEASE_PREFIX: ${{ (github.ref_name == 'live' || github.base_ref == 'live') && 'live' || 'personal' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -92,7 +97,7 @@ jobs:
         env:
           N: ${{ steps.number.outputs.n }}
         run: |
-          export VERSION_CODE=$((1000 + N)) VERSION_NAME="personal-$N"
+          export VERSION_CODE=$((1000 + N)) VERSION_NAME="$RELEASE_PREFIX-$N"
           ./gradlew --no-daemon --init-script .github/arm64-only.gradle assembleUnstableRelease
 
       - name: Check the APK is signed with the private key

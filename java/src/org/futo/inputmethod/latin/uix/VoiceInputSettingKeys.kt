@@ -79,6 +79,13 @@ val ANIMATE_BUBBLE = SettingsKey(
     default = true
 )
 
+// Live voice typing: each sentence appears as it is said, up to the last spoken mark, instead of
+// all the text at the end.
+val LIVE_VOICE_TYPING = SettingsKey(
+    key = booleanPreferencesKey("live_voice_typing"),
+    default = true
+)
+
 val LEARN_FROM_VOICE_EDITS = SettingsKey(
     key = booleanPreferencesKey("learn_from_voice_edits"),
     default = true

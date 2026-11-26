@@ -284,7 +284,9 @@ android {
     productFlavors {
         unstable {
             dimension "buildType"
-            applicationIdSuffix ".unstable"
+            // The live-typing test build (the "live" branch) is a separate app, so it installs
+            // beside the personal-N builds without touching them.
+            applicationIdSuffix ".live"
             versionNameSuffix "-unstable"
 
             buildConfigField "boolean", "IS_PLAYSTORE_BUILD", "false"
