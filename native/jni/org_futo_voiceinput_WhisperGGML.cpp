@@ -99,7 +99,13 @@ static jstring WhisperGGML_infer(JNIEnv *env, jobject instance, jlong handle, jf
     wparams.n_threads = (int)num_procs;
 
     wparams.audio_ctx = std::max(160, std::min(1500, (int)ceil((double)num_samples / (double)(320.0)) + 32));
-    wparams.temperature_inc = 0.0f;
+
+    // One cheap retry: when a pass fails Whisper's own checks (a repetition loop, or low average
+    // confidence), decode it once more at temperature 0.6. Temperatures run 0, 0.6 and stop below
+    // 1.0, so there is at most one retry, it re-runs only the decoder (the encoder output is
+    // reused), it samples just 2 candidates, and whisper.cpp only retries with over 3 s of audio left.
+    // On a good pass it costs nothing, which keeps weak phones (e.g. a Moto G 2025) fast.
+    wparams.temperature_inc = 0.6f;
 
     // Replicates old tflite behavior
     if(decoding_mode == 0) {
@@ -108,7 +114,8 @@ static jstring WhisperGGML_infer(JNIEnv *env, jobject instance, jlong handle, jf
     } else {
         wparams.strategy = WHISPER_SAMPLING_BEAM_SEARCH;
         wparams.beam_search.beam_size = decoding_mode;
-        wparams.greedy.best_of = decoding_mode;
+        // best_of is only used by the retry above, at temperature > 0.
+        wparams.greedy.best_of = 2;
     }
 
 

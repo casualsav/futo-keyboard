@@ -81,6 +81,12 @@ private fun getRecordingDeviceKind(type: Int): String {
 // 50 frames is about one and a half seconds (upstream waits 66, about two).
 private const val AUTO_STOP_SILENCE_FRAMES = 50
 
+// When auto-stop ends the recording, the silence that triggered it is cut off before
+// transcribing, keeping this much after the last speech. Whisper's encoder time grows with the
+// audio's length, so this saves about a second of work on every dictation, and trailing silence
+// is where Whisper tends to invent words like "you" or "thank you".
+private const val SILENCE_KEPT_AFTER_SPEECH_SAMPLES = 16000 / 2
+
 data class RecordingSettings(
     val preferBluetoothMic: Boolean,
     val requestAudioFocus: Boolean,
@@ -112,6 +118,11 @@ class AudioRecognizer(
     private val useVAD = settings.recordingConfiguration.useVADAutoStop
 
     private var floatSamples: FloatBuffer = FloatBuffer.allocate(16000 * 30)
+
+    // End of the last 100 ms chunk the VAD heard speech in (or that the VAD did not check), and
+    // whether the recording ended on auto-stop. Used to cut the trailing silence; see runModel.
+    private var lastSpeechEndSample = 0
+    private var stoppedOnSilence = false
     private var recorderJob: Job? = null
     private var modelJob: Job? = null
     private var loadModelJob: Job? = null
@@ -341,6 +352,7 @@ class AudioRecognizer(
 
             val hasNotTalkedRecently = hasTalked && (numConsecutiveNonSpeech > AUTO_STOP_SILENCE_FRAMES) && useVAD
             if (isRunningOutOfSpace || hasNotTalkedRecently) {
+                stoppedOnSilence = hasNotTalkedRecently && !isRunningOutOfSpace
                 yield()
                 withContext(Dispatchers.Main) {
                     finish()
@@ -349,6 +361,7 @@ class AudioRecognizer(
             }
 
             // Run VAD
+            var chunkHadSpeech = false
             if(useVAD && vad != null) {
                 var remainingSamples = nRead
                 var offset = 0
@@ -364,6 +377,7 @@ class AudioRecognizer(
                         } else {
                             numConsecutiveNonSpeech = 0
                             numConsecutiveSpeech++
+                            chunkHadSpeech = true
                         }
                     }
 
@@ -379,6 +393,7 @@ class AudioRecognizer(
             }
 
             floatSamples.put(samples.sliceArray(0 until nRead).map { it.toFloat() / Short.MAX_VALUE.toFloat() }.toFloatArray())
+            if (chunkHadSpeech) lastSpeechEndSample = floatSamples.position()
 
             // Don't set hasTalked if the start sound may still be playing, otherwise on some
             // devices the rms just explodes and `hasTalked` is always true
@@ -436,6 +451,8 @@ class AudioRecognizer(
                         break
                     }
                     floatSamples.put(samples.sliceArray(0 until nRead2).map { it.toFloat() / Short.MAX_VALUE.toFloat() }.toFloatArray())
+                    // The VAD doesn't see samples read while catching up, so keep them.
+                    lastSpeechEndSample = floatSamples.position()
                 } else {
                     break
                 }
@@ -552,7 +569,15 @@ class AudioRecognizer(
             }
         }
 
-        val floatArray = floatSamples.array().sliceArray(0 until floatSamples.position())
+        // Only after auto-stop: the VAD then heard over a second of silence at the end, so cutting
+        // it can't lose speech. A recording the user stopped by hand is sent whole.
+        val recordedSamples = floatSamples.position()
+        val endSample = if (stoppedOnSilence && lastSpeechEndSample > 0) {
+            min(recordedSamples, lastSpeechEndSample + SILENCE_KEPT_AFTER_SPEECH_SAMPLES)
+        } else {
+            recordedSamples
+        }
+        val floatArray = floatSamples.array().sliceArray(0 until endSample)
 
         yield()
         val outputText = try {
