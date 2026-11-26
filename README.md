@@ -1,5 +1,11 @@
 # FUTO Keyboard
 
+> **This is a modified version of FUTO Keyboard.** It is a personal, non-commercial fork of
+> [FUTO Keyboard](https://github.com/futo-org/android-keyboard) and is not made or supported by
+> FUTO, so please don't report its problems to FUTO. Changes from the original are mainly to voice
+> typing, which types only the punctuation you say and has accuracy fixes. It is shared free of
+> charge under the [FUTO Source First License](LICENSE.md), which also covers these changes.
+
 The goal is to make a good modern keyboard that stays offline and doesn't spy on you. This keyboard is a fork of [LatinIME, The Android Open-Source Keyboard](https://android.googlesource.com/platform/packages/inputmethods/LatinIME), with significant changes made to it.
 
 Check out the [FUTO Keyboard website](https://keyboard.futo.tech/) for downloads and more information.
