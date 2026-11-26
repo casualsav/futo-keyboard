@@ -1,15 +1,16 @@
-# cost: about 30 machine-minutes per landing on main, on the owner's runner
+# cost: free (public repository on GitHub-hosted runners), about 30 minutes per landing on main
 name: Release
 
-# Builds the unstable release APK on the owner's own runner on the vnic server (never GitHub's
-# machines) and publishes it as the next "personal-N" GitHub release. Runs on every landing on
-# main, or by hand. A pull request that changes the release setup runs the same signed build as
-# a dry run, without publishing, so the signing is proven before it lands.
+# Builds the unstable release APK on GitHub's ubuntu-latest machines and publishes it as the
+# next "personal-N" GitHub release. Runs on every landing on main, or by hand. A pull request
+# from this repository that changes the release setup runs the same signed build as a dry run,
+# without publishing, so the signing is proven before it lands. Pull requests from forks get no
+# secrets, so their dry run stops at the signing step.
 #
-# Signing: with the owner's private key, which lives only on the runner at
-# /home/gh-futo/keys/release.jks (alias futo); its password is the SIGNING_PASSWORD secret. The
-# key file is never committed or uploaded. If the file or the secret is missing the job stops,
-# rather than falling back to the public debug key.
+# Signing: with the owner's private key (alias futo), kept as two encrypted repository secrets:
+# SIGNING_KEYSTORE_BASE64 (the keystore file, base64) and SIGNING_PASSWORD. The key is written to
+# the job's temp directory for the build and deleted at the end. If either secret is missing the
+# job stops, rather than falling back to the public debug key.
 
 on:
   push:
@@ -32,27 +33,12 @@ permissions:
 
 jobs:
   release:
-    # Linux ARM64 with JDK 17 and the Android SDK (ANDROID_HOME) preinstalled.
-    runs-on: [self-hosted, futo]
+    runs-on: ubuntu-latest
     timeout-minutes: 150
     env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      SIGNING_KEYSTORE: /home/gh-futo/keys/release.jks
       SIGNING_ALIAS: futo
     steps:
-      # This runner keeps its workspace between jobs. The git-lfs hooks and filters that the last
-      # job set up would make checkout call git-lfs, which only exists inside a job, so clear them.
-      - name: Clear git-lfs setup left by an earlier job
-        run: |
-          [ -d .git ] || exit 0
-          for cfg in .git/config $(find .git/modules -type f -name config -execdir test -f HEAD \; -print 2>/dev/null); do
-            git config --file "$cfg" --remove-section filter.lfs 2>/dev/null || true
-            git config --file "$cfg" --remove-section lfs 2>/dev/null || true
-          done
-          find .git -path '*/hooks/*' -type f \( -name post-checkout -o -name post-commit -o -name post-merge -o -name pre-push \) \
-            -exec grep -l 'git lfs' {} + | xargs -r rm -f
-
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive
@@ -67,20 +53,27 @@ jobs:
       # only for this job (it is in .gitignore) and removed in the last step, whatever happens.
       - name: Point the build at the private signing key
         env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
-          if [ ! -f "$SIGNING_KEYSTORE" ]; then
-            echo "::error::The signing key $SIGNING_KEYSTORE is missing on the runner. Create it with keytool (alias $SIGNING_ALIAS), then re-run."
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "::error::The SIGNING_KEYSTORE_BASE64 repository secret is not set. Add the keystore, base64-encoded, under Settings > Secrets and variables > Actions, then re-run."
             exit 1
           fi
           if [ -z "$SIGNING_PASSWORD" ]; then
             echo "::error::The SIGNING_PASSWORD repository secret is not set. Add it under Settings > Secrets and variables > Actions, then re-run."
             exit 1
           fi
+          export SIGNING_KEYSTORE="$RUNNER_TEMP/release.jks"
+          (umask 077 && printf '%s' "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$SIGNING_KEYSTORE") || {
+            echo "::error::SIGNING_KEYSTORE_BASE64 is not valid base64."
+            exit 1
+          }
           if ! keytool -list -keystore "$SIGNING_KEYSTORE" -alias "$SIGNING_ALIAS" -storepass:env SIGNING_PASSWORD >/dev/null; then
-            echo "::error::The key in $SIGNING_KEYSTORE could not be opened with SIGNING_PASSWORD and alias $SIGNING_ALIAS."
+            echo "::error::The keystore in SIGNING_KEYSTORE_BASE64 could not be opened with SIGNING_PASSWORD and alias $SIGNING_ALIAS."
             exit 1
           fi
+          echo "SIGNING_KEYSTORE=$SIGNING_KEYSTORE" >> "$GITHUB_ENV"
           python3 -I - <<'PY'
           import os
           def esc(v):
@@ -109,7 +102,8 @@ jobs:
         run: |
           apk=$(ls build/outputs/apk/unstable/release/*.apk | grep -v -- '-unsigned' | head -1)
           if [ -z "$apk" ]; then echo "::error::No signed release APK was built"; ls build/outputs/apk/unstable/release/; exit 1; fi
-          signed=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          signed=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           expected=$(keytool -list -v -keystore "$SIGNING_KEYSTORE" -alias "$SIGNING_ALIAS" -storepass:env SIGNING_PASSWORD | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f')
           if [ -z "$signed" ] || [ "$signed" != "$expected" ]; then
             echo "::error::The APK is not signed with the private key (APK: $signed, key: $expected)."
@@ -128,4 +122,4 @@ jobs:
 
       - name: Remove the signing config
         if: ${{ always() }}
-        run: rm -f keystore.properties
+        run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
