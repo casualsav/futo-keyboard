@@ -103,7 +103,11 @@ jobs:
           apk=$(ls build/outputs/apk/unstable/release/*.apk | grep -v -- '-unsigned' | head -1)
           if [ -z "$apk" ]; then echo "::error::No signed release APK was built"; ls build/outputs/apk/unstable/release/; exit 1; fi
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
-          signed=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          echo "Checking $apk with $apksigner"
+          certs=$("$apksigner" verify --print-certs "$apk")
+          printf '%s\n' "$certs" | grep 'certificate SHA-256 digest' || true
+          # Newer apksigner prints "Signer (minSdkVersion=..., ...)" instead of "Signer #1"; every signer must be the private key.
+          signed=$(printf '%s\n' "$certs" | sed -n 's/^Signer.* certificate SHA-256 digest: //p' | sort -u)
           expected=$(keytool -list -v -keystore "$SIGNING_KEYSTORE" -alias "$SIGNING_ALIAS" -storepass:env SIGNING_PASSWORD | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f')
           if [ -z "$signed" ] || [ "$signed" != "$expected" ]; then
             echo "::error::The APK is not signed with the private key (APK: $signed, key: $expected)."
