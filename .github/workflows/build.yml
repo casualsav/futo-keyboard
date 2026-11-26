@@ -1,9 +1,8 @@
-# cost: 90 machine-minutes per landing, removed by the owner when the fork stops needing builds
+# cost: free (public repository on GitHub-hosted runners), about 30 minutes a run
 name: Build
 
-# Unit tests and an installable unstable debug APK, on the owner's own runner on the vnic server
-# (never GitHub's machines). A pull request runs it once on the tree that will land; a hand start
-# runs it on any branch.
+# Unit tests and an installable unstable debug APK, on GitHub's ubuntu-latest machines. A pull
+# request runs it once on the tree that will land; a hand start runs it on any branch.
 
 on:
   pull_request:
@@ -18,24 +17,9 @@ permissions:
 
 jobs:
   build:
-    # Linux ARM64 with JDK 17 and the Android SDK (ANDROID_HOME) preinstalled.
-    runs-on: [self-hosted, futo]
+    runs-on: ubuntu-latest
     timeout-minutes: 150
-    env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-arm64
     steps:
-      # This runner keeps its workspace between jobs. The git-lfs hooks and filters that the last
-      # job set up would make checkout call git-lfs, which only exists inside a job, so clear them.
-      - name: Clear git-lfs setup left by an earlier job
-        run: |
-          [ -d .git ] || exit 0
-          for cfg in .git/config $(find .git/modules -type f -name config -execdir test -f HEAD \; -print 2>/dev/null); do
-            git config --file "$cfg" --remove-section filter.lfs 2>/dev/null || true
-            git config --file "$cfg" --remove-section lfs 2>/dev/null || true
-          done
-          find .git -path '*/hooks/*' -type f \( -name post-checkout -o -name post-commit -o -name post-merge -o -name pre-push \) \
-            -exec grep -l 'git lfs' {} + | xargs -r rm -f
-
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           submodules: recursive

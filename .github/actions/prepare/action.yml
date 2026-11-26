@@ -1,24 +1,22 @@
 name: Prepare the FUTO Keyboard build
 description: >
-  Run after checkout with submodules on the self-hosted vnic runner (Linux ARM64). Fetches
-  git-lfs into the job's temp directory, pulls the LFS files in every submodule, checks the
-  Gradle wrapper, gives the emulated x86-64 NDK the zlib it needs and shows the toolchain.
+  Run after checkout with submodules on a GitHub-hosted ubuntu-latest machine. Puts JDK 17 on
+  the path, pulls the LFS files in every submodule, checks the Gradle wrapper, caches Gradle and
+  shows the toolchain.
 
 runs:
   using: composite
   steps:
-    # The runner has no git-lfs (nor curl); FUTO's swipe models sit in LFS. One checksum-verified
-    # static binary goes into the job's temp directory, nothing is installed system-wide.
-    - name: Put Java on the path
+    # ubuntu-latest ships several JDKs; FUTO builds with 17.
+    - name: Use JDK 17
       shell: bash
-      run: echo "$JAVA_HOME/bin" >> "$GITHUB_PATH"
+      run: |
+        echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+        echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
 
-    - name: Fetch git-lfs
-      shell: bash
-      run: python3 -I "$GITHUB_WORKSPACE/.github/scripts/fetch-git-lfs.py" "$RUNNER_TEMP/git-lfs" >> "$GITHUB_PATH"
-
-    # Without `git lfs install --local` in each submodule, `git lfs pull` skips the checkout and
-    # the swipe models ship as 132-byte pointer stubs, which crash the keyboard on the first swipe.
+    # FUTO's swipe models sit in LFS inside submodules. Without `git lfs install --local` in each
+    # submodule, `git lfs pull` skips the checkout and the models ship as 132-byte pointer stubs,
+    # which crash the keyboard on the first swipe.
     - name: Fetch large files in submodules
       shell: bash
       run: |
@@ -30,27 +28,15 @@ runs:
     - name: Check the Gradle wrapper is a real Gradle release
       uses: gradle/actions/wrapper-validation@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
 
-    # The NDK's compiler is an x86-64 program; on this ARM64 runner it runs under emulation and
-    # needs an x86-64 zlib, which the runner lacks. A pinned Ubuntu package is unpacked into the
-    # job's temp directory (python for the download, as there is no curl). ARM64 programs skip
-    # these x86-64 libraries, so putting them on LD_LIBRARY_PATH affects only the NDK.
-    - name: x86-64 zlib for the NDK compiler
-      shell: bash
-      run: |
-        d="$RUNNER_TEMP/x86-64-zlib"
-        f=zlib1g_1.3.dfsg-3.1ubuntu2.3_amd64.deb
-        python3 -I -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' \
-          "http://archive.ubuntu.com/ubuntu/pool/main/z/zlib/$f" "$RUNNER_TEMP/$f"
-        echo "376249c8de139568221dbb242318cc8cb8f02299e3a62b7432948e1754fbddf9  $RUNNER_TEMP/$f" | sha256sum -c -
-        dpkg-deb -x "$RUNNER_TEMP/$f" "$d"
-        echo "LD_LIBRARY_PATH=$d/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+    # Caches Gradle's downloads and build cache between runs, which saves most of a build's time.
+    - name: Cache Gradle
+      uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
 
     - name: Show the toolchain
       shell: bash
       run: |
         uname -m
-        "$JAVA_HOME/bin/java" -version
+        java -version
         echo "ANDROID_HOME=$ANDROID_HOME"
-        ls "$ANDROID_HOME/ndk" "$ANDROID_HOME/build-tools"
-        clang=$(ls "$ANDROID_HOME"/ndk/28.2.13676358/toolchains/llvm/prebuilt/*/bin/clang | head -1)
-        "$clang" --version | head -1
+        ls "$ANDROID_HOME/ndk" "$ANDROID_HOME/build-tools" || true
+        df -h "$GITHUB_WORKSPACE" | tail -1
