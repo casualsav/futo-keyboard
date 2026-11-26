@@ -21,4 +21,10 @@ interface AudioRecognizerListener {
     fun updateMagnitude(magnitude: Float, state: MagnitudeState)
 
     fun processing()
+
+    /**
+     * Live voice typing: [committed] is final (sentences up to the last spoken mark), [display]
+     * is that plus the sentence still being said, for showing in the text field.
+     */
+    fun liveText(committed: String, display: String) {}
 }

@@ -31,6 +31,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.futo.voiceinput.shared.ggml.InferenceCancelledException
 import org.futo.voiceinput.shared.ggml.InvalidModelException
+import org.futo.voiceinput.shared.live.LiveSegmenter
 import org.futo.voiceinput.shared.types.AudioRecognizerListener
 import org.futo.voiceinput.shared.types.InferenceState
 import org.futo.voiceinput.shared.types.Language
@@ -45,6 +46,7 @@ import org.futo.voiceinput.shared.whisper.MultiModelRunner
 import org.futo.voiceinput.shared.whisper.isBlankResult
 import java.nio.FloatBuffer
 import java.nio.ShortBuffer
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -87,6 +89,24 @@ private const val AUTO_STOP_SILENCE_FRAMES = 50
 // is where Whisper tends to invent words like "you" or "thank you".
 private const val SILENCE_KEPT_AFTER_SPEECH_SAMPLES = 16000 / 2
 
+// Live voice typing (see LiveSegmenter): a piece of the recording is transcribed at each pause
+// of about a third of a second (12 VAD frames) while the user keeps talking. A piece needs at
+// least a second of audio. One that has grown to 15 seconds without a spoken mark is kept whole,
+// so no audio is transcribed over and over. The final piece after the user stops is skipped
+// when it would be shorter than 0.3 seconds.
+private const val LIVE_PAUSE_FRAMES = 12
+private const val LIVE_MIN_PIECE_SAMPLES = 16000
+private const val LIVE_MAX_PIECE_SAMPLES = 16000 * 15
+private const val LIVE_MIN_FINAL_SAMPLES = 16000 * 3 / 10
+
+/**
+ * Live voice typing. [convert] turns a raw transcript into the text to type (spoken punctuation);
+ * the result passed to [AudioRecognizerListener.finished] is then already converted.
+ */
+data class LiveTranscriptionSettings(
+    val convert: (String) -> String
+)
+
 data class RecordingSettings(
     val preferBluetoothMic: Boolean,
     val requestAudioFocus: Boolean,
@@ -97,7 +117,8 @@ data class RecordingSettings(
 data class AudioRecognizerSettings(
     val modelRunConfiguration: MultiModelRunConfiguration,
     val decodingConfiguration: DecodingConfiguration,
-    val recordingConfiguration: RecordingSettings
+    val recordingConfiguration: RecordingSettings,
+    val liveTranscription: LiveTranscriptionSettings? = null
 )
 
 class ModelDoesNotExistException(val models: List<ModelLoader>) : Throwable()
@@ -128,6 +149,16 @@ class AudioRecognizer(
     private var loadModelJob: Job? = null
 
     private var focusRequest: AudioFocusRequest? = null
+
+    // Live voice typing state. The audio start is where the next piece begins; the last run end
+    // is where the newest transcribed piece ended. Both are written only by the live pieces and
+    // the final run, which never overlap; the recording loop reads them.
+    private val liveSettings = settings.liveTranscription
+    private var segmenter: LiveSegmenter? = liveSettings?.let { LiveSegmenter(it.convert) }
+    @Volatile private var liveAudioStart = 0
+    @Volatile private var lastLiveRunEnd = -1
+    private var liveJob: Job? = null
+    private var livePauseHandled = false
 
     private var communicationDevice = "unknown"
 
@@ -238,6 +269,7 @@ class AudioRecognizer(
         recorder = null
 
         modelJob?.cancel()
+        liveJob?.cancel()
         isRecording = false
 
         modelRunner.cancelAll()
@@ -360,9 +392,9 @@ class AudioRecognizer(
                 return
             }
 
-            // Run VAD
+            // Run VAD (also when only live voice typing needs it, to find pauses)
             var chunkHadSpeech = false
-            if(useVAD && vad != null) {
+            if(vad != null) {
                 var remainingSamples = nRead
                 var offset = 0
                 while (remainingSamples > 0) {
@@ -407,6 +439,13 @@ class AudioRecognizer(
 
             if (startSoundPassed && ((rms > 0.01) || (numConsecutiveSpeech > 8))) {
                 hasTalked = true
+            }
+
+            if (segmenter != null && vad != null) {
+                if (numConsecutiveNonSpeech == 0) livePauseHandled = false
+                if (hasTalked && startSoundPassed && numConsecutiveNonSpeech >= LIVE_PAUSE_FRAMES) {
+                    maybeStartLivePiece()
+                }
             }
 
             if (rms > 0.0001) {
@@ -486,7 +525,7 @@ class AudioRecognizer(
 
             recorderJob = lifecycleScope.launch {
                 withContext(Dispatchers.Default) {
-                    if(useVAD) {
+                    if(useVAD || liveSettings != null) {
                         createVad().use { vad ->
                             recordingJob(recorder, vad)
                         }
@@ -519,6 +558,11 @@ class AudioRecognizer(
     }
 
     private fun startRecording() {
+        segmenter = liveSettings?.let { LiveSegmenter(it.convert) }
+        liveAudioStart = 0
+        lastLiveRunEnd = -1
+        livePauseHandled = false
+
         val device = try {
             createRecorderAndJob(settings.recordingConfiguration.preferBluetoothMic)
         } catch (e: SecurityException) {
@@ -561,7 +605,123 @@ class AudioRecognizer(
         }
     }
 
+    // Pieces transcribed while recording keep the recording screen as it is: no status changes, and
+    // Whisper's token-by-token partials are not shown (the piece's result is, through liveText).
+    private val quietCallback: ModelInferenceCallback = object : ModelInferenceCallback {
+        override fun updateStatus(state: InferenceState) {}
+        override fun languageDetected(language: Language) {}
+        override fun partialResult(string: String) {}
+    }
+
+    /** Called from the recording loop during a pause; starts transcribing a piece if one is due. */
+    private fun maybeStartLivePiece() {
+        if (livePauseHandled) return
+        if (liveJob?.isActive == true) return
+        val start = liveAudioStart
+        val end = floatSamples.position()
+        // Nothing new said since the last piece, or too little audio to be worth a run.
+        if (lastSpeechEndSample <= max(start, lastLiveRunEnd)) return
+        if (end - start < LIVE_MIN_PIECE_SAMPLES) return
+
+        livePauseHandled = true
+        val samples = floatSamples.array().sliceArray(start until end)
+        val tooLong = end - start >= LIVE_MAX_PIECE_SAMPLES
+        liveJob = lifecycleScope.launch(Dispatchers.Default) {
+            runLivePiece(samples, end, tooLong)
+        }
+    }
+
+    private suspend fun runLivePiece(samples: FloatArray, end: Int, keepAll: Boolean) {
+        loadModelJob?.join()
+        val raw = try {
+            modelRunner.run(
+                samples,
+                settings.modelRunConfiguration,
+                settings.decodingConfiguration,
+                quietCallback
+            ).trim()
+        } catch (e: InferenceCancelledException) {
+            return
+        }
+        val seg = segmenter ?: return
+        val result = seg.onPiece(if (isBlankResult(raw)) "" else raw, final = keepAll)
+        lastLiveRunEnd = end
+        if (result.advanceAudioStart) liveAudioStart = end
+
+        val committed = seg.committed
+        val display = seg.display()
+        withContext(Dispatchers.Main) {
+            listener.liveText(committed, display)
+        }
+    }
+
+    /** The end of a live recording: transcribe only what the pieces haven't settled yet. */
+    private suspend fun runLiveFinal(seg: LiveSegmenter) {
+        liveJob?.join()
+        loadModelJob?.join()
+
+        val start = liveAudioStart
+        val recordedSamples = floatSamples.position()
+        val endSample = if (stoppedOnSilence && lastSpeechEndSample > 0) {
+            min(recordedSamples, lastSpeechEndSample + SILENCE_KEPT_AFTER_SPEECH_SAMPLES)
+        } else {
+            recordedSamples
+        }
+        val noNewSpeech = lastSpeechEndSample <= max(start, lastLiveRunEnd)
+
+        if (stoppedOnSilence && lastLiveRunEnd >= start && noNewSpeech) {
+            // Auto-stop after a pause the last piece already covered: its transcript stands.
+            seg.keepPending()
+        } else if (endSample - start < LIVE_MIN_FINAL_SAMPLES) {
+            seg.keepPending()
+        } else {
+            val samples = floatSamples.array().sliceArray(start until endSample)
+            val finalCallback = object : ModelInferenceCallback {
+                override fun updateStatus(state: InferenceState) {
+                    listener.decodingStatus(state)
+                }
+                override fun languageDetected(language: Language) {
+                    listener.languageDetected(language)
+                }
+                override fun partialResult(string: String) {
+                    if (isBlankResult(string)) return
+                    val committed = seg.committed
+                    val preview = seg.previewOf(string)
+                    lifecycleScope.launch(Dispatchers.Main) {
+                        listener.liveText(committed, preview)
+                    }
+                }
+            }
+            val raw = try {
+                modelRunner.run(
+                    samples,
+                    settings.modelRunConfiguration,
+                    settings.decodingConfiguration,
+                    finalCallback
+                ).trim()
+            } catch (e: InferenceCancelledException) {
+                yield()
+                return
+            }
+            seg.onPiece(if (isBlankResult(raw)) "" else raw, final = true)
+        }
+
+        val text = seg.committed
+        yield()
+        lifecycleScope.launch {
+            withContext(Dispatchers.Main) {
+                yield()
+                listener.finished(text)
+            }
+        }
+    }
+
     private suspend fun runModel() {
+        segmenter?.let {
+            runLiveFinal(it)
+            return
+        }
+
         loadModelJob?.let {
             if (it.isActive) {
                 println("Model was not finished loading...")

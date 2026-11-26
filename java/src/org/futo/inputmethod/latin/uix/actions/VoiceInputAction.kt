@@ -34,6 +34,9 @@ import org.futo.inputmethod.latin.uix.CAN_EXPAND_SPACE
 import org.futo.inputmethod.latin.uix.CloseResult
 import org.futo.inputmethod.latin.uix.DISALLOW_SYMBOLS
 import org.futo.inputmethod.latin.uix.SPOKEN_PUNCTUATION_ONLY
+import org.futo.inputmethod.latin.uix.LIVE_VOICE_TYPING
+import org.futo.inputmethod.latin.uix.utils.SpokenPunctuation
+import org.futo.voiceinput.shared.LiveTranscriptionSettings
 import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.ENABLE_SOUND
 import org.futo.inputmethod.latin.uix.KeyboardManagerForAction
@@ -124,6 +127,15 @@ private class VoiceInputActionWindow(
 
     private var shouldPlaySounds: Boolean = false
     private val spokenPunctuationOnly: Boolean = context.getSetting(SPOKEN_PUNCTUATION_ONLY)
+    private val liveTyping: Boolean = context.getSetting(LIVE_VOICE_TYPING)
+
+    // Live voice typing: the sentences already final, kept if voice input is cancelled.
+    private var liveCommitted = ""
+
+    private fun sanitizeForInput(text: String): String =
+        VoiceEditTracker.applyLearned(context,
+            ModelOutputSanitizer.sanitize(text, inputTransaction.textContext, spokenPunctuationOnly,
+                alreadyConverted = liveTyping))
     private fun loadSettings(): RecognizerViewSettings {
         val enableSound = context.getSetting(ENABLE_SOUND)
         val verboseFeedback = false//context.getSetting(VERBOSE_PROGRESS)
@@ -171,7 +183,10 @@ private class VoiceInputActionWindow(
                 requestAudioFocus = requestAudioFocus,
                 canExpandSpace = canExpandSpace,
                 useVADAutoStop = useVAD
-            )
+            ),
+            liveTranscription = if (liveTyping) LiveTranscriptionSettings(
+                convert = { if (spokenPunctuationOnly) SpokenPunctuation.apply(it) else it }
+            ) else null
         )
     }
 
@@ -256,6 +271,11 @@ private class VoiceInputActionWindow(
                 state.soundPlayer?.playCancelSound()
                 cancelPlayed = true
             }
+            if (liveTyping) {
+                // Keep the finished sentences; drop the one still being said.
+                inputTransaction.updatePartial(
+                    if (liveCommitted.isNotEmpty()) sanitizeForInput(liveCommitted) else "")
+            }
             inputTransaction.cancel()
         }
     }
@@ -278,8 +298,7 @@ private class VoiceInputActionWindow(
         wasFinished = true
 
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = VoiceEditTracker.applyLearned(context,
-                ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly))
+            val sanitized = sanitizeForInput(result)
             inputTransaction.commit(sanitized)
             inputTransaction.learningContext?.let {
                 VoiceEditTracker.onVoiceTyped(context, manager.getLifecycleScope(), sanitized,
@@ -291,10 +310,17 @@ private class VoiceInputActionWindow(
     }
 
     override fun partialResult(result: String) {
+        if (liveTyping) return
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = VoiceEditTracker.applyLearned(context,
-                ModelOutputSanitizer.sanitize(result, inputTransaction.textContext, spokenPunctuationOnly))
-            inputTransaction.updatePartial(sanitized)
+            inputTransaction.updatePartial(sanitizeForInput(result))
+        }
+    }
+
+    override fun liveText(committed: String, display: String) {
+        manager.getLifecycleScope().launch(Dispatchers.Main) {
+            if (wasFinished) return@launch
+            liveCommitted = committed
+            inputTransaction.updatePartial(sanitizeForInput(display))
         }
     }
 
