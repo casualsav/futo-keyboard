@@ -11,6 +11,7 @@ import org.futo.inputmethod.latin.VoiceInputAlternativeICComposing
 import org.futo.inputmethod.latin.common.Constants
 import org.futo.inputmethod.latin.common.InputPointers
 import org.futo.inputmethod.latin.uix.ActionInputTransaction
+import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.getSetting
 import org.futo.inputmethod.latin.uix.utils.TextContext
 import org.futo.inputmethod.v2keyboard.KeyboardLayoutSetV2
@@ -75,6 +76,12 @@ class ActionInputTransactionIME(val helper: IMEHelper) : IMEInterface, ActionInp
         beforeCursor = ic?.getTextBeforeCursor(Constants.VOICE_INPUT_CONTEXT_SIZE, 0),
         afterCursor = ic?.getTextAfterCursor(Constants.VOICE_INPUT_CONTEXT_SIZE, 0)
     )
+
+    override val learningContext: TextContext? =
+        if (VoiceEditTracker.isEnabled(helper.context)) TextContext(
+            beforeCursor = ic?.getTextBeforeCursor(VoiceEditTracker.CONTEXT_CHARS, 0),
+            afterCursor = ic?.getTextAfterCursor(VoiceEditTracker.CONTEXT_CHARS, 0)
+        ) else null
 
     private var isFinished = false
     private var partialText = ""

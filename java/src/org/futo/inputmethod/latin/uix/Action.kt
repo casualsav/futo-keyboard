@@ -37,6 +37,9 @@ import java.util.Locale
 
 interface ActionInputTransaction {
     val textContext: TextContext
+
+    /** A wider look around the cursor, read only when learning from voice edits is on. */
+    val learningContext: TextContext? get() = null
     fun updatePartial(text: String)
     fun commit(text: String)
     fun cancel()

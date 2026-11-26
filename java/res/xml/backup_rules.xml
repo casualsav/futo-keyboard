@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older. Keeps what the keyboard learns from voice edits out of cloud backups;
+     everything else is backed up as before. -->
+<full-backup-content>
+    <exclude domain="file" path="voice_edit_learning.tsv" />
+    <exclude domain="file" path="voice_edit_learning.tsv.tmp" />
+</full-backup-content>

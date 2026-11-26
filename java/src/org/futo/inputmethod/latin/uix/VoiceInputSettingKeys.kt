@@ -78,3 +78,8 @@ val ANIMATE_BUBBLE = SettingsKey(
     key = booleanPreferencesKey("animate_bubble"),
     default = true
 )
+
+val LEARN_FROM_VOICE_EDITS = SettingsKey(
+    key = booleanPreferencesKey("learn_from_voice_edits"),
+    default = true
+)

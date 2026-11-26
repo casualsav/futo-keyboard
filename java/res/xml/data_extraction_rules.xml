@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and newer. Keeps what the keyboard learns from voice edits out of cloud backups;
+     everything else is backed up as before. A direct phone-to-phone transfer still carries it. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="voice_edit_learning.tsv" />
+        <exclude domain="file" path="voice_edit_learning.tsv.tmp" />
+    </cloud-backup>
+</data-extraction-rules>
