@@ -33,6 +33,7 @@ import kotlinx.coroutines.yield
 import org.futo.voiceinput.shared.ggml.InferenceCancelledException
 import org.futo.voiceinput.shared.ggml.InvalidModelException
 import org.futo.voiceinput.shared.live.LiveSegmenter
+import org.futo.voiceinput.shared.live.VoiceEnergy
 import org.futo.voiceinput.shared.types.AudioRecognizerListener
 import org.futo.voiceinput.shared.types.InferenceState
 import org.futo.voiceinput.shared.types.Language
@@ -349,6 +350,10 @@ class AudioRecognizer(
             recorder.setPreferredMicrophoneDirection(MicrophoneDirection.MIC_DIRECTION_TOWARDS_USER)
         }
 
+        // Attached before recording starts, as through live-3. Attaching it to a running
+        // recording (live-4 to live-6) is when early auto-stops began.
+        attachNoiseSuppressor(recorder)
+
         return recorder
     }
 
@@ -406,6 +411,10 @@ class AudioRecognizer(
         val vadSampleBuffer = ShortBuffer.allocate(480)
         var numConsecutiveNonSpeech = 0
         var numConsecutiveSpeech = 0
+        // Auto-stop counts frames where neither the VAD nor the loudness check heard a voice, so
+        // soft or noise-filtered speech that the VAD misses doesn't end the recording.
+        val voiceEnergy = VoiceEnergy()
+        var framesSinceVoice = 0
 
         val samples = ShortArray(1600)
         // Some mics give silent (all zero) buffers while they warm up.
@@ -419,11 +428,12 @@ class AudioRecognizer(
 
             var isRunningOutOfSpace = (floatSamples.remaining() < nRead.coerceAtLeast(1600)) && !expandSpaceIfAllowed()
 
-            val hasNotTalkedRecently = hasTalked && (numConsecutiveNonSpeech > AUTO_STOP_SILENCE_FRAMES) && useVAD
+            val hasNotTalkedRecently = hasTalked && (framesSinceVoice > AUTO_STOP_SILENCE_FRAMES) && useVAD
             if (isRunningOutOfSpace || hasNotTalkedRecently) {
                 stoppedOnSilence = hasNotTalkedRecently && !isRunningOutOfSpace
                 yield()
                 withContext(Dispatchers.Main) {
+                    listener.stoppedListening()
                     finish()
                 }
                 return
@@ -437,6 +447,7 @@ class AudioRecognizer(
                 while (remainingSamples > 0) {
                     if (!vadSampleBuffer.hasRemaining()) {
                         val isSpeech = vad.isSpeech(vadSampleBuffer.array())
+                        val isLoudVoice = voiceEnergy.isVoice(vadSampleBuffer.array())
                         vadSampleBuffer.clear()
                         vadSampleBuffer.rewind()
 
@@ -446,7 +457,13 @@ class AudioRecognizer(
                         } else {
                             numConsecutiveNonSpeech = 0
                             numConsecutiveSpeech++
+                        }
+
+                        if (isSpeech || isLoudVoice) {
+                            framesSinceVoice = 0
                             chunkHadSpeech = true
+                        } else {
+                            framesSinceVoice++
                         }
                     }
 
@@ -477,6 +494,7 @@ class AudioRecognizer(
             if (!startSoundPassed) {
                 numConsecutiveSpeech = 0
                 numConsecutiveNonSpeech = 0
+                framesSinceVoice = 0
             }
 
             val rms = sqrt(samples.sumOf { (it.toFloat() / Short.MAX_VALUE.toFloat()).pow(2).toDouble() } / samples.size).toFloat()
@@ -571,8 +589,6 @@ class AudioRecognizer(
 
             recorder.startRecording()
             this.recorder = recorder
-            // After starting, so setting up the filter doesn't hold back the first audio.
-            attachNoiseSuppressor(recorder)
 
             isRecording = true
 

@@ -75,6 +75,9 @@ interface RecognizerViewListener {
     /** The mic is giving real audio, so speech from now on is caught. */
     fun listening() {}
 
+    /** The recording ended on its own (the user didn't tap to stop). */
+    fun stoppedListening() {}
+
     // Return true if a permission modal was shown, otherwise return false
     fun requestPermission(onGranted: () -> Unit, onRejected: () -> Unit): Boolean
 
@@ -199,6 +202,10 @@ class RecognizerView(
 
         override fun listening() {
             listener.listening()
+        }
+
+        override fun stoppedListening() {
+            listener.stoppedListening()
         }
 
         override fun decodingStatus(status: InferenceState) {

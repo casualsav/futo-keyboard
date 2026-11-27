@@ -593,7 +593,7 @@
     <string name="action_settings_clipboard_button">Clipboard button on the left</string>
     <string name="action_settings_clipboard_button_subtitle">Shows a clipboard button where the actions arrow was. Long-press it for all actions</string>
     <string name="voice_input_settings_buzz_when_listening">Buzz when listening</string>
-    <string name="voice_input_settings_buzz_when_listening_subtitle">One short buzz once the mic is ready, so you know when to start talking. Replaces the start sound</string>
+    <string name="voice_input_settings_buzz_when_listening_subtitle">One short buzz once the mic is ready, so you know when to start talking, and two light taps if it stops on its own. Replaces the start sound</string>
     <string name="voice_input_settings_suppress_noise">Filter background noise</string>
     <string name="voice_input_settings_suppress_noise_subtitle">Uses your phone\'s own noise filter on the mic, where it has one. Turn off if it makes quiet speech harder to catch</string>
     <string name="voice_input_settings_audio_focus">Audio Focus</string>
