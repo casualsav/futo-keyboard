@@ -590,6 +590,8 @@
     <string name="voice_input_settings_use_personal_dict_subtitle">Whether or not to use the personal dictionary for voice input</string>
     <string name="voice_input_settings_use_bluetooth_mic">Prefer Bluetooth Mic</string>
     <string name="voice_input_settings_use_bluetooth_mic_subtitle">There may be extra delay to recording starting as Bluetooth SCO connection must be negotiated</string>
+    <string name="action_settings_clipboard_button">Clipboard button on the left</string>
+    <string name="action_settings_clipboard_button_subtitle">Shows a clipboard button where the actions arrow was. Long-press it for all actions</string>
     <string name="voice_input_settings_buzz_when_listening">Buzz when listening</string>
     <string name="voice_input_settings_buzz_when_listening_subtitle">One short buzz once the mic is ready, so you know when to start talking. Replaces the start sound</string>
     <string name="voice_input_settings_suppress_noise">Filter background noise</string>

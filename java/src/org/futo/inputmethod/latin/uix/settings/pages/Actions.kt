@@ -28,6 +28,8 @@ import org.futo.inputmethod.latin.uix.settings.useDataStoreValue
 import org.futo.inputmethod.latin.uix.settings.userSettingDecorationOnly
 import org.futo.inputmethod.latin.uix.settings.userSettingNavigationItem
 import org.futo.inputmethod.latin.uix.urlEncode
+import org.futo.inputmethod.latin.uix.ClipboardInsteadOfActionsArrow
+import org.futo.inputmethod.latin.uix.settings.userSettingToggleDataStore
 
 val ActionsScreen = UserSettingsMenu(
     title = R.string.action_settings_title,
@@ -149,6 +151,12 @@ val ActionsScreen = UserSettingsMenu(
         },
 
         // TODO: Add a "Show voice input button" toggle
+
+        userSettingToggleDataStore(
+            title = R.string.action_settings_clipboard_button,
+            subtitle = R.string.action_settings_clipboard_button_subtitle,
+            setting = ClipboardInsteadOfActionsArrow
+        ),
 
         userSettingNavigationItem(
             title = R.string.action_editor_title,
