@@ -123,6 +123,7 @@ import org.futo.inputmethod.latin.suggestions.SuggestionStripViewListener
 import org.futo.inputmethod.latin.uix.actions.FavoriteActions
 import org.futo.inputmethod.latin.uix.actions.MoreActionsAction
 import org.futo.inputmethod.latin.uix.actions.PinnedActions
+import org.futo.inputmethod.latin.uix.actions.clipboard.ClipboardHistoryAction
 import org.futo.inputmethod.latin.uix.actions.toActionList
 import org.futo.inputmethod.latin.uix.settings.useDataStore
 import org.futo.inputmethod.latin.uix.settings.useDataStoreValue
@@ -187,6 +188,13 @@ val ActionBarExpanded = SettingsKey(
 val OldStyleActionsBar = SettingsKey(
     booleanPreferencesKey("oldActionBar"),
     false
+)
+
+// Live build: an always-there clipboard button takes the place of the arrow that opens the
+// actions row. Long-press it to open or close the actions row.
+val ClipboardInsteadOfActionsArrow = SettingsKey(
+    booleanPreferencesKey("clipboard_instead_of_actions_arrow"),
+    true
 )
 
 
@@ -700,7 +708,17 @@ fun ActionItems(onSelect: (Action) -> Unit, onLongSelect: (Action) -> Unit) {
 
 
 @Composable
-fun ExpandActionsButton(isActionsOpen: Boolean, onClick: () -> Unit) {
+fun ExpandActionsButton(isActionsOpen: Boolean, onClipboard: (() -> Unit)? = null, onClick: () -> Unit) {
+    val clipboardSetting = if (!LocalInspectionMode.current) {
+        useDataStoreValue(ClipboardInsteadOfActionsArrow)
+    } else {
+        false
+    }
+    if (onClipboard != null && clipboardSetting) {
+        ClipboardActionsButton(onClipboard = onClipboard, onToggleActions = onClick)
+        return
+    }
+
     val bgCol = LocalKeyboardScheme.current.keyboardContainer
     val fgCol = LocalKeyboardScheme.current.onKeyboardContainer
 
@@ -737,6 +755,43 @@ fun ExpandActionsButton(isActionsOpen: Boolean, onClick: () -> Unit) {
                 else R.string.keyboard_actionbar_collapse_actions_talkback
             ),
             Modifier.size(20.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ClipboardActionsButton(onClipboard: () -> Unit, onToggleActions: () -> Unit) {
+    val bgCol = LocalKeyboardScheme.current.keyboardContainer
+    val fgCol = LocalKeyboardScheme.current.onKeyboardContainer
+
+    val circleRadius = with(LocalDensity.current) {
+        16.dp.toPx()
+    }
+
+    Box(modifier = Modifier
+        .width(42.dp)
+        .fillMaxHeight()
+        .drawBehind {
+            drawCircle(
+                color = bgCol,
+                radius = circleRadius,
+                style = Fill
+            )
+        }
+        .clip(CircleShape)
+        .combinedClickable(
+            onLongClickLabel = stringResource(R.string.keyboard_actionbar_expand_actions_talkback),
+            onLongClick = onToggleActions,
+            onClick = onClipboard
+        ),
+        contentAlignment = Center
+    ) {
+        Icon(
+            painter = painterResource(id = ClipboardHistoryAction.icon),
+            contentDescription = stringResource(ClipboardHistoryAction.name),
+            tint = fgCol,
+            modifier = Modifier.size(16.dp)
         )
     }
 }
@@ -869,7 +924,10 @@ fun ActionBar(
                 .weight(1.0f), color = actionBarColor()
         ) {
             Row(Modifier.safeKeyboardPadding()) {
-                ExpandActionsButton(isActionsExpanded) {
+                ExpandActionsButton(
+                    isActionsExpanded,
+                    onClipboard = { onActionActivated(ClipboardHistoryAction) }
+                ) {
                     toggleActionsExpanded()
 
                     keyboardManagerForAction?.performHapticAndAudioFeedback(
@@ -1254,7 +1312,10 @@ private fun RowScope.InlineCandidates(
                 if(closeActionWindow != null) {
                     CloseActionWindowButton(closeActionWindow)
                 } else {
-                    ExpandActionsButton(isActionsExpanded) {
+                    ExpandActionsButton(
+                        isActionsExpanded,
+                        onClipboard = { manager.activateAction(ClipboardHistoryAction) }
+                    ) {
                         toggleActionsExpanded()
 
                         manager.performHapticAndAudioFeedback(
