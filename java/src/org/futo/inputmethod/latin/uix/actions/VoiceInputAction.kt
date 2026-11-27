@@ -339,23 +339,50 @@ private class VoiceInputActionWindow(
         }
     }
 
+    private fun vibrator(): Vibrator? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }?.takeIf { it.hasVibrator() }
+    } catch (_: Exception) {
+        null
+    }
+
     private var buzzed = false
     override fun listening() {
         if (!buzzWhenListening || buzzed) return
         buzzed = true
         try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            } ?: return
-            if (!vibrator.hasVibrator()) return
+            val vibrator = vibrator() ?: return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(40)
+            }
+        } catch (_: Exception) {
+            // No buzz is better than a crash.
+        }
+    }
+
+    // When the mic stops on its own: two light taps, unlike the single start buzz, so a stop
+    // while you are still talking doesn't go unnoticed.
+    override fun stoppedListening() {
+        if (!buzzWhenListening) return
+        try {
+            val vibrator = vibrator() ?: return
+            val timings = longArrayOf(0, 20, 90, 20)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (vibrator.hasAmplitudeControl()) {
+                    vibrator.vibrate(VibrationEffect.createWaveform(timings, intArrayOf(0, 90, 0, 90), -1))
+                } else {
+                    vibrator.vibrate(VibrationEffect.createWaveform(timings, -1))
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(timings, -1)
             }
         } catch (_: Exception) {
             // No buzz is better than a crash.

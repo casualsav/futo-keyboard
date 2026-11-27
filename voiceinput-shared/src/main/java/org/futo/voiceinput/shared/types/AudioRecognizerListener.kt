@@ -30,4 +30,7 @@ interface AudioRecognizerListener {
 
     /** Called once per recording, when the mic first gives real (not silent) audio. */
     fun listening() {}
+
+    /** Called when the recording ends on its own, after a pause or when out of space. */
+    fun stoppedListening() {}
 }
