@@ -1,6 +1,11 @@
 package org.futo.inputmethod.latin.uix.actions
 
+import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -35,6 +40,7 @@ import org.futo.inputmethod.latin.uix.CloseResult
 import org.futo.inputmethod.latin.uix.DISALLOW_SYMBOLS
 import org.futo.inputmethod.latin.uix.SPOKEN_PUNCTUATION_ONLY
 import org.futo.inputmethod.latin.uix.LIVE_VOICE_TYPING
+import org.futo.inputmethod.latin.uix.BUZZ_WHEN_LISTENING
 import org.futo.inputmethod.latin.uix.SUPPRESS_MIC_NOISE
 import org.futo.inputmethod.latin.uix.utils.SpokenPunctuation
 import org.futo.voiceinput.shared.LiveTranscriptionSettings
@@ -129,6 +135,7 @@ private class VoiceInputActionWindow(
     private var shouldPlaySounds: Boolean = false
     private val spokenPunctuationOnly: Boolean = context.getSetting(SPOKEN_PUNCTUATION_ONLY)
     private val liveTyping: Boolean = context.getSetting(LIVE_VOICE_TYPING)
+    private val buzzWhenListening: Boolean = context.getSetting(BUZZ_WHEN_LISTENING)
 
     // Live voice typing: the sentences already final, kept if voice input is cancelled.
     private var liveCommitted = ""
@@ -145,24 +152,11 @@ private class VoiceInputActionWindow(
         val requestAudioFocus = context.getSetting(AUDIO_FOCUS)
         val canExpandSpace = context.getSetting(CAN_EXPAND_SPACE)
         val useVAD = context.getSetting(USE_VAD_AUTOSTOP)
-        val usePersonalDict = context.getSetting(USE_PERSONAL_DICT)
         val animateBubble = context.getSetting(ANIMATE_BUBBLE)
 
         val primaryModel = model
         val languageSpecificModels = mutableMapOf<Language, ModelLoader>()
         val allowedLanguages = locales.mapNotNull { getLanguageFromWhisperString(it.language) }.toSet()
-        val dictionaryWords = if(usePersonalDict) {
-            state.userDictionaryObserver.getWords(locales).filter { it.shortcut.isNullOrEmpty() }.map { it.word }
-        } else {
-            emptyList()
-        }
-        // Words from fixes learned from the user's own edits come first: they're the words
-        // Whisper has been getting wrong.
-        val learnedWords = VoiceEditTracker.learnedWords(context)
-        val glossary = VoiceGlossary.select(
-            dictionaryWords = learnedWords + dictionaryWords,
-            alwaysInclude = if(spokenPunctuationOnly) VoiceGlossary.SPOKEN_PUNCTUATION_WORDS else emptyList()
-        )
 
         shouldPlaySounds = enableSound
 
@@ -175,7 +169,8 @@ private class VoiceInputActionWindow(
                 languageSpecificModels = languageSpecificModels
             ),
             decodingConfiguration = DecodingConfiguration(
-                glossary = glossary,
+                // Built after the mic is open (see buildGlossary), so it doesn't delay recording.
+                glossary = emptyList(),
                 languages = allowedLanguages,
                 suppressSymbols = disallowSymbols
             ),
@@ -189,6 +184,21 @@ private class VoiceInputActionWindow(
             liveTranscription = if (liveTyping) LiveTranscriptionSettings(
                 convert = { if (spokenPunctuationOnly) SpokenPunctuation.apply(it) else it }
             ) else null
+        )
+    }
+
+    private fun buildGlossary(): List<String> {
+        val dictionaryWords = if(context.getSetting(USE_PERSONAL_DICT)) {
+            state.userDictionaryObserver.getWords(locales).filter { it.shortcut.isNullOrEmpty() }.map { it.word }
+        } else {
+            emptyList()
+        }
+        // Words from fixes learned from the user's own edits come first: they're the words
+        // Whisper has been getting wrong.
+        val learnedWords = VoiceEditTracker.learnedWords(context)
+        return VoiceGlossary.select(
+            dictionaryWords = learnedWords + dictionaryWords,
+            alwaysInclude = if(spokenPunctuationOnly) VoiceGlossary.SPOKEN_PUNCTUATION_WORDS else emptyList()
         )
     }
 
@@ -220,6 +230,8 @@ private class VoiceInputActionWindow(
 
         //yield()
         recognizerView.start()
+
+        recognizerView.setGlossary(buildGlossary())
     }
 
     private var inputTransaction = manager.createInputTransaction()
@@ -283,7 +295,8 @@ private class VoiceInputActionWindow(
     }
 
     override fun recordingStarted(device: MicrophoneDeviceState) {
-        if (shouldPlaySounds) {
+        // With the buzz on, it is the only cue: the start sound plays before the mic is ready.
+        if (shouldPlaySounds && !buzzWhenListening) {
             state.soundPlayer?.playStartSound()
         }
 
@@ -323,6 +336,29 @@ private class VoiceInputActionWindow(
             if (wasFinished) return@launch
             liveCommitted = committed
             inputTransaction.updatePartial(sanitizeForInput(display))
+        }
+    }
+
+    private var buzzed = false
+    override fun listening() {
+        if (!buzzWhenListening || buzzed) return
+        buzzed = true
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            } ?: return
+            if (!vibrator.hasVibrator()) return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(40)
+            }
+        } catch (_: Exception) {
+            // No buzz is better than a crash.
         }
     }
 

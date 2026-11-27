@@ -138,6 +138,13 @@ class AudioRecognizer(
     private var recorder: AudioRecord? = null
     private var noiseSuppressor: NoiseSuppressor? = null
 
+    // Starts as given; the glossary can arrive after recording has started.
+    @Volatile private var decodingConfiguration: DecodingConfiguration = settings.decodingConfiguration
+
+    fun setGlossary(glossary: List<String>) {
+        decodingConfiguration = decodingConfiguration.copy(glossary = glossary)
+    }
+
     private val modelRunner = MultiModelRunner(modelManager)
 
     private val canExpandSpace = settings.recordingConfiguration.canExpandSpace
@@ -342,8 +349,6 @@ class AudioRecognizer(
             recorder.setPreferredMicrophoneDirection(MicrophoneDirection.MIC_DIRECTION_TOWARDS_USER)
         }
 
-        attachNoiseSuppressor(recorder)
-
         return recorder
     }
 
@@ -403,6 +408,8 @@ class AudioRecognizer(
         var numConsecutiveSpeech = 0
 
         val samples = ShortArray(1600)
+        // Some mics give silent (all zero) buffers while they warm up.
+        var heardRealAudio = false
 
         while (isRecording) {
             yield()
@@ -456,6 +463,13 @@ class AudioRecognizer(
 
             floatSamples.put(samples.sliceArray(0 until nRead).map { it.toFloat() / Short.MAX_VALUE.toFloat() }.toFloatArray())
             if (chunkHadSpeech) lastSpeechEndSample = floatSamples.position()
+
+            if (!heardRealAudio && hasRealAudio(samples, nRead)) {
+                heardRealAudio = true
+                withContext(Dispatchers.Main) {
+                    listener.listening()
+                }
+            }
 
             // Don't set hasTalked if the start sound may still be playing, otherwise on some
             // devices the rms just explodes and `hasTalked` is always true
@@ -530,7 +544,14 @@ class AudioRecognizer(
         println("isRecording loop exited")
     }
 
-    private fun createVad(): VadModel {
+    private fun hasRealAudio(samples: ShortArray, n: Int): Boolean {
+        for (i in 0 until n) {
+            if (samples[i].toInt() != 0) return true
+        }
+        return false
+    }
+
+        private fun createVad(): VadModel {
         return Vad.builder().setModel(Model.WEB_RTC_GMM).setMode(Mode.VERY_AGGRESSIVE)
             .setFrameSize(FrameSize.FRAME_SIZE_480).setSampleRate(SampleRate.SAMPLE_RATE_16K)
             .setSpeechDurationMs(150).setSilenceDurationMs(300).build()
@@ -550,6 +571,8 @@ class AudioRecognizer(
 
             recorder.startRecording()
             this.recorder = recorder
+            // After starting, so setting up the filter doesn't hold back the first audio.
+            attachNoiseSuppressor(recorder)
 
             isRecording = true
 
@@ -667,7 +690,7 @@ class AudioRecognizer(
             modelRunner.run(
                 samples,
                 settings.modelRunConfiguration,
-                settings.decodingConfiguration,
+                decodingConfiguration,
                 quietCallback
             ).trim()
         } catch (e: InferenceCancelledException) {
@@ -726,7 +749,7 @@ class AudioRecognizer(
                 modelRunner.run(
                     samples,
                     settings.modelRunConfiguration,
-                    settings.decodingConfiguration,
+                    decodingConfiguration,
                     finalCallback
                 ).trim()
             } catch (e: InferenceCancelledException) {
@@ -774,7 +797,7 @@ class AudioRecognizer(
              modelRunner.run(
                 floatArray,
                 settings.modelRunConfiguration,
-                settings.decodingConfiguration,
+                decodingConfiguration,
                 runnerCallback
             ).trim()
         }catch(e: InferenceCancelledException) {
