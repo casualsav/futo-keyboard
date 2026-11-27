@@ -85,6 +85,7 @@ import org.futo.inputmethod.latin.utils.JniUtils;
 import org.futo.inputmethod.latin.utils.StatsUtils;
 import org.futo.inputmethod.latin.utils.ViewLayoutUtils;
 import org.futo.inputmethod.v2keyboard.KeyboardLayoutSetV2;
+import org.futo.inputmethod.latin.uix.actions.VoiceInputPressFeedback;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.FileDescriptor;
@@ -880,6 +881,8 @@ public class LatinIMELegacy implements KeyboardActionListener,
         if(primaryCode == Constants.CODE_DELETE && repeatCount > 1) {
             if(!getActiveIME().hasMoreTextToDelete()) return;
         }
+        // The mic buzzes once it is listening; skip the press buzz so there is only one.
+        if(VoiceInputPressFeedback.skipPressBuzzForCode(getLatinIME(), primaryCode)) return;
         hapticAndAudioFeedback(primaryCode, repeatCount);
     }
 
