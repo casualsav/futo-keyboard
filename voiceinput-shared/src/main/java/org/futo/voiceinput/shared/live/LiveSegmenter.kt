@@ -25,8 +25,8 @@ class LiveSegmenter(private val convert: (String) -> String) {
     var pending: String = ""
         private set
 
-    /** Marks kept from the audio since the current audio start; skipped in the next transcript. */
-    private var marksKeptFromCurrentAudio = 0
+    /** Text kept from the audio since the current audio start; skipped in the next transcript. */
+    private var keptFromCurrentAudio = ""
 
     /** What [onPiece] decided. */
     data class Result(val advanceAudioStart: Boolean)
@@ -36,14 +36,18 @@ class LiveSegmenter(private val convert: (String) -> String) {
      * [final]: the last piece, or a piece grown too long; everything in it is kept.
      */
     fun onPiece(rawText: String, final: Boolean = false): Result {
-        val text = skipMarks(convert(rawText).trim(), marksKeptFromCurrentAudio)
+        val text = skipKept(convert(rawText).trim(), keptFromCurrentAudio)
 
         if (final) {
             committed = join(committed, text)
             pending = ""
-            marksKeptFromCurrentAudio = 0
+            keptFromCurrentAudio = ""
             return Result(advanceAudioStart = true)
         }
+
+        // A piece that came back empty (noise, or Whisper returning nothing) says nothing new:
+        // the preview stays, rather than vanishing until the next piece brings it back.
+        if (text.isEmpty()) return Result(advanceAudioStart = false)
 
         val lastMarkEnd = lastMarkEnd(text)
         if (lastMarkEnd < 0) {
@@ -57,10 +61,10 @@ class LiveSegmenter(private val convert: (String) -> String) {
         pending = rest
 
         return if (rest.isEmpty()) {
-            marksKeptFromCurrentAudio = 0
+            keptFromCurrentAudio = ""
             Result(advanceAudioStart = true)
         } else {
-            marksKeptFromCurrentAudio += countMarks(kept)
+            keptFromCurrentAudio = join(keptFromCurrentAudio, kept)
             Result(advanceAudioStart = false)
         }
     }
@@ -72,12 +76,8 @@ class LiveSegmenter(private val convert: (String) -> String) {
     fun keepPending() {
         committed = join(committed, pending)
         pending = ""
-        marksKeptFromCurrentAudio = 0
+        keptFromCurrentAudio = ""
     }
-
-    /** How the screen should read while the last piece is still being decoded: [rawPartial] so far. */
-    fun previewOf(rawPartial: String): String =
-        join(committed, skipMarks(convert(rawPartial).trim(), marksKeptFromCurrentAudio))
 
     /** Committed text and preview together, as it should read on screen. */
     fun display(): String = join(committed, pending)
@@ -143,7 +143,45 @@ class LiveSegmenter(private val convert: (String) -> String) {
             return i + 1
         }
 
-        /** [text] after its first [n] marks; all of it when [n] is 0. */
+        private val WORD = Regex("""[\p{L}\p{N}'’]+""")
+
+        /**
+         * [text] without the part that was already kept. Usually that's everything up to the
+         * same number of marks as [kept] has. When the new transcript heard a spoken mark
+         * differently, its marks no longer line up with the kept words (the cut would land
+         * far from where the kept words end), so it skips as many words as [kept] has instead,
+         * and the words after it still come through.
+         */
+        fun skipKept(text: String, kept: String): String {
+            if (kept.isBlank()) return text
+            val keptWords = WORD.findAll(kept).count()
+            if (keptWords == 0) return text
+            val n = countMarks(kept)
+            val byMarks = markIndex(text, n)
+            if (byMarks >= 0) {
+                val wordsBefore = WORD.findAll(text.substring(0, byMarks)).count()
+                if (kotlin.math.abs(wordsBefore - keptWords) <= 2) return text.substring(byMarks + 1).trim()
+            }
+            val match = WORD.findAll(text).drop(keptWords - 1).firstOrNull() ?: return ""
+            var end = match.range.last + 1
+            while (end < text.length && isMarkAt(text, end)) end++
+            return text.substring(end).trim()
+        }
+
+        /** Index of the [n]th mark in [text], or -1. */
+        private fun markIndex(text: String, n: Int): Int {
+            if (n <= 0) return -1
+            var seen = 0
+            for (i in text.indices) {
+                if (isMarkAt(text, i)) {
+                    seen++
+                    if (seen == n) return i
+                }
+            }
+            return -1
+        }
+
+        /** [text] after its first [n] marks; all of it when [n] is 0, nothing with fewer. */
         fun skipMarks(text: String, n: Int): String {
             if (n <= 0) return text
             var seen = 0
@@ -153,8 +191,6 @@ class LiveSegmenter(private val convert: (String) -> String) {
                     if (seen == n) return text.substring(i + 1).trim()
                 }
             }
-            // The new transcript has fewer marks than were kept: it heard the same words
-            // differently. The kept text stands; keep nothing more from this transcript.
             return ""
         }
 
