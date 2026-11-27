@@ -713,14 +713,10 @@ class AudioRecognizer(
                 override fun languageDetected(language: Language) {
                     listener.languageDetected(language)
                 }
-                override fun partialResult(string: String) {
-                    if (isBlankResult(string)) return
-                    val committed = seg.committed
-                    val preview = seg.previewOf(string)
-                    lifecycleScope.launch(Dispatchers.Main) {
-                        listener.liveText(committed, preview)
-                    }
-                }
+                // Whisper's token-by-token partials start over from the start of the piece, so
+                // showing them would make the preview shrink and grow back. The preview from the
+                // last piece stays on screen until the final text replaces it.
+                override fun partialResult(string: String) {}
             }
             val raw = try {
                 modelRunner.run(

@@ -107,9 +107,29 @@ class LiveSegmenterTest {
     }
 
     @Test
-    fun aTranscriptWithFewerMarksThanKeptAddsNothing() {
-        assertEquals("", LiveSegmenter.skipMarks("one two", 1))
-        assertEquals("b c", LiveSegmenter.skipMarks("a, b c", 1))
+    fun skipKeptUsesMarksThenWords() {
+        assertEquals("b c", LiveSegmenter.skipKept("a, b c", "a,"))
+        // The rerun heard the spoken comma as a word: skip by word count instead. The misheard
+        // word comes through, but nothing said after it is lost.
+        assertEquals("come and bought milk.", LiveSegmenter.skipKept("I went to the store come and bought milk.", "I went to the store,"))
+        assertEquals("", LiveSegmenter.skipKept("one two", "one, two, three,"))
+    }
+
+    @Test
+    fun aRerunThatLosesAMarkStillTypesTheRest() {
+        val s = spoken()
+        s.onPiece("I went to the store comma and")
+        assertEquals("I went to the store,", s.committed)
+        assertTrue(s.onPiece("I went to the store come and bought milk period").advanceAudioStart)
+        assertEquals("I went to the store, come and bought milk.", s.committed)
+    }
+
+    @Test
+    fun anEmptyPieceKeepsThePreview() {
+        val s = spoken()
+        s.onPiece("Hello there period. How are")
+        assertFalse(s.onPiece("").advanceAudioStart)
+        assertEquals("Hello there. How are", s.display())
     }
 
     @Test
