@@ -123,6 +123,7 @@ import org.futo.inputmethod.latin.settings.Settings
 import org.futo.inputmethod.latin.suggestions.SuggestionStripViewListener
 import org.futo.inputmethod.latin.uix.actions.ActionEditor
 import org.futo.inputmethod.latin.uix.actions.ActionRegistry
+import org.futo.inputmethod.latin.uix.actions.VoiceInputPressFeedback
 import org.futo.inputmethod.latin.uix.actions.AllActions
 import org.futo.inputmethod.latin.uix.actions.BugViewerAction
 import org.futo.inputmethod.latin.uix.actions.BugViewerState
@@ -719,10 +720,12 @@ class UixManager(private val latinIME: LatinIME) {
                     suggestionStripListener,
                     inlineSuggestions = inlineSuggestions,
                     onActionActivated = {
-                        keyboardManagerForAction.performHapticAndAudioFeedback(
-                            Constants.CODE_TAB,
-                            view
-                        )
+                        if (!VoiceInputPressFeedback.skipPressBuzz(latinIME, it)) {
+                            keyboardManagerForAction.performHapticAndAudioFeedback(
+                                Constants.CODE_TAB,
+                                view
+                            )
+                        }
                         onActionActivated(it)
                     },
                     onActionAltActivated = {

@@ -403,3 +403,18 @@ val VoiceInputAction = Action(icon = R.drawable.mic_fill,
         }
     }
 )
+/**
+ * With "Buzz when listening" on, the mic gives one buzz: the one when it is listening. The usual
+ * key-press buzz on the mic is skipped so there aren't two.
+ */
+object VoiceInputPressFeedback {
+    @JvmStatic
+    fun skipPressBuzz(context: Context, action: Action): Boolean =
+        action == VoiceInputAction &&
+                ActionRegistry.getActionOverride(context, action) == VoiceInputAction &&
+                context.getSetting(BUZZ_WHEN_LISTENING)
+
+    @JvmStatic
+    fun skipPressBuzzForCode(context: Context, code: Int): Boolean =
+        code == VoiceInputAction.keyCode && skipPressBuzz(context, VoiceInputAction)
+}
