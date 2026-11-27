@@ -28,6 +28,7 @@ import org.futo.inputmethod.latin.uix.USE_VAD_AUTOSTOP
 import org.futo.inputmethod.latin.uix.LEARN_FROM_VOICE_EDITS
 import org.futo.inputmethod.latin.uix.LIVE_VOICE_TYPING
 import org.futo.inputmethod.latin.uix.SUPPRESS_MIC_NOISE
+import org.futo.inputmethod.latin.uix.BUZZ_WHEN_LISTENING
 import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.settings.DropDownPickerSettingItem
 import org.futo.inputmethod.latin.uix.settings.NavigationItemStyle
@@ -176,6 +177,12 @@ val VoiceInputMenu = UserSettingsMenu(
             title = R.string.voice_input_settings_spoken_punctuation_only,
             subtitle = R.string.voice_input_settings_spoken_punctuation_only_subtitle,
             setting = SPOKEN_PUNCTUATION_ONLY
+        ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
+
+        userSettingToggleDataStore(
+            title = R.string.voice_input_settings_buzz_when_listening,
+            subtitle = R.string.voice_input_settings_buzz_when_listening_subtitle,
+            setting = BUZZ_WHEN_LISTENING
         ).copy(visibilityCheck = visibilityCheckNotSystemVoiceInput),
 
         userSettingToggleDataStore(

@@ -72,6 +72,9 @@ interface RecognizerViewListener {
     /** Live voice typing; see [AudioRecognizerListener.liveText]. */
     fun liveText(committed: String, display: String) {}
 
+    /** The mic is giving real audio, so speech from now on is caught. */
+    fun listening() {}
+
     // Return true if a permission modal was shown, otherwise return false
     fun requestPermission(onGranted: () -> Unit, onRejected: () -> Unit): Boolean
 
@@ -194,6 +197,10 @@ class RecognizerView(
             listener.liveText(committed, display)
         }
 
+        override fun listening() {
+            listener.listening()
+        }
+
         override fun decodingStatus(status: InferenceState) {
             val text = context.getString(
                 when (settings.shouldShowVerboseFeedback) {
@@ -264,5 +271,10 @@ class RecognizerView(
 
     fun start() {
         recognizer.start()
+    }
+
+    /** Sets the glossary after recording has started, so building it doesn't delay the mic. */
+    fun setGlossary(glossary: List<String>) {
+        recognizer.setGlossary(glossary)
     }
 }

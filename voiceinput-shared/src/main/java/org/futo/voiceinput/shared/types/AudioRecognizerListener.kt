@@ -27,4 +27,7 @@ interface AudioRecognizerListener {
      * is that plus the sentence still being said, for showing in the text field.
      */
     fun liveText(committed: String, display: String) {}
+
+    /** Called once per recording, when the mic first gives real (not silent) audio. */
+    fun listening() {}
 }

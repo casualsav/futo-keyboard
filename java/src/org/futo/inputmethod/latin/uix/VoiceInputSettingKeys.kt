@@ -92,6 +92,12 @@ val LIVE_VOICE_TYPING = SettingsKey(
     default = true
 )
 
+// One short buzz when the mic is actually giving audio, so you know when to start talking.
+val BUZZ_WHEN_LISTENING = SettingsKey(
+    key = booleanPreferencesKey("buzz_when_listening"),
+    default = true
+)
+
 val LEARN_FROM_VOICE_EDITS = SettingsKey(
     key = booleanPreferencesKey("learn_from_voice_edits"),
     default = true
