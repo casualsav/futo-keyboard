@@ -43,6 +43,7 @@ import org.futo.inputmethod.latin.uix.LIVE_VOICE_TYPING
 import org.futo.inputmethod.latin.uix.BUZZ_WHEN_LISTENING
 import org.futo.inputmethod.latin.uix.SUPPRESS_MIC_NOISE
 import org.futo.inputmethod.latin.uix.utils.SpokenPunctuation
+import org.futo.inputmethod.latin.uix.utils.LiveTextRecovery
 import org.futo.voiceinput.shared.LiveTranscriptionSettings
 import org.futo.inputmethod.latin.uix.VoiceEditTracker
 import org.futo.inputmethod.latin.uix.ENABLE_SOUND
@@ -139,10 +140,11 @@ private class VoiceInputActionWindow(
 
     // Live voice typing: the sentences already final, kept if voice input is cancelled.
     private var liveCommitted = ""
+    private var liveDisplay = ""
 
     private fun sanitizeForInput(text: String): String =
         VoiceEditTracker.applyLearned(context,
-            ModelOutputSanitizer.sanitize(text, inputTransaction.textContext, spokenPunctuationOnly,
+            ModelOutputSanitizer.sanitize(text, startContext, spokenPunctuationOnly,
                 alreadyConverted = liveTyping))
     private fun loadSettings(): RecognizerViewSettings {
         val enableSound = context.getSetting(ENABLE_SOUND)
@@ -236,6 +238,32 @@ private class VoiceInputActionWindow(
 
     private var inputTransaction = manager.createInputTransaction()
 
+    // The text around the cursor when voice input opened; kept if the field is taken back.
+    private val startContext = inputTransaction.textContext
+
+    // Live voice typing: the text last put in the field, and how much of it was left there as
+    // plain text when an app restarted the field mid-dictation (written again only past that).
+    private var liveShown = ""
+    private var liveLeftInField = ""
+
+    /**
+     * Writes live text, taking the field back first if the app ended the keyboard's hold on it
+     * while the user was talking, so nothing said is lost or typed twice.
+     */
+    private fun writeLive(fullText: String, final: Boolean) {
+        if (!inputTransaction.isActive) {
+            val newTransaction = try { manager.createInputTransaction() } catch (e: Exception) { null }
+            if (newTransaction != null) {
+                inputTransaction = newTransaction
+                liveLeftInField = LiveTextRecovery.leftInField(
+                    newTransaction.textContext.beforeCursor?.toString() ?: "", liveShown)
+            }
+        }
+        val toWrite = LiveTextRecovery.remainder(liveLeftInField, fullText)
+        if (final) inputTransaction.commit(toWrite) else inputTransaction.updatePartial(toWrite)
+        liveShown = fullText
+    }
+
     @Composable
     private fun ModelDownloader(modelException: ModelDoesNotExistException) {
         NoModelInstalled(locales.firstOrNull() ?: Locale.ROOT)
@@ -285,11 +313,7 @@ private class VoiceInputActionWindow(
                 state.soundPlayer?.playCancelSound()
                 cancelPlayed = true
             }
-            if (liveTyping) {
-                // Keep the finished sentences; drop the one still being said.
-                inputTransaction.updatePartial(
-                    if (liveCommitted.isNotEmpty()) sanitizeForInput(liveCommitted) else "")
-            }
+            // Live voice typing: what was shown stays, so nothing said is lost.
             inputTransaction.cancel()
         }
     }
@@ -313,8 +337,10 @@ private class VoiceInputActionWindow(
         wasFinished = true
 
         manager.getLifecycleScope().launch(Dispatchers.Main) {
-            val sanitized = sanitizeForInput(result)
-            inputTransaction.commit(sanitized)
+            // Never end up with less than was shown while talking.
+            val text = if (liveTyping && result.isBlank() && liveDisplay.isNotBlank()) liveDisplay else result
+            val sanitized = sanitizeForInput(text)
+            if (liveTyping) writeLive(sanitized, final = true) else inputTransaction.commit(sanitized)
             inputTransaction.learningContext?.let {
                 VoiceEditTracker.onVoiceTyped(context, manager.getLifecycleScope(), sanitized,
                     before = it.beforeCursor?.toString() ?: "", after = it.afterCursor?.toString() ?: "")
@@ -335,7 +361,8 @@ private class VoiceInputActionWindow(
         manager.getLifecycleScope().launch(Dispatchers.Main) {
             if (wasFinished) return@launch
             liveCommitted = committed
-            inputTransaction.updatePartial(sanitizeForInput(display))
+            liveDisplay = display
+            writeLive(sanitizeForInput(display), final = false)
         }
     }
 
@@ -351,6 +378,11 @@ private class VoiceInputActionWindow(
     }
 
     private var buzzed = false
+    override fun micTaken() {
+        // Buzz again once the mic is back, so the user knows to carry on.
+        buzzed = false
+    }
+
     override fun listening() {
         if (!buzzWhenListening || buzzed) return
         buzzed = true

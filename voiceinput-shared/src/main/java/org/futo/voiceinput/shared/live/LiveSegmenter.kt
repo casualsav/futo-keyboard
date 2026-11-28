@@ -39,6 +39,14 @@ class LiveSegmenter(private val convert: (String) -> String) {
         val text = skipKept(convert(rawText).trim(), keptFromCurrentAudio)
 
         if (final) {
+            // The last pass covers the words already shown as the preview. When it comes back
+            // empty, or with far fewer words than that preview (Whisper sometimes drops most of a
+            // long piece, or returns a stray "Thank you."), what was shown is kept instead, so a
+            // dictation is never lost at the end.
+            if (pending.isNotEmpty() && lostMostOf(pending, text)) {
+                keepPending()
+                return Result(advanceAudioStart = true)
+            }
             committed = join(committed, text)
             pending = ""
             keptFromCurrentAudio = ""
@@ -144,6 +152,17 @@ class LiveSegmenter(private val convert: (String) -> String) {
         }
 
         private val WORD = Regex("""[\p{L}\p{N}'’]+""")
+
+        fun wordCount(text: String): Int = WORD.findAll(text).count()
+
+        /** Whether [replacement] has lost most of [shown]: none of its words, or under 60% of them. */
+        fun lostMostOf(shown: String, replacement: String): Boolean {
+            val shownWords = wordCount(shown)
+            if (shownWords == 0) return false
+            val newWords = wordCount(replacement)
+            if (newWords == 0) return true
+            return shownWords >= 3 && newWords * 10 < shownWords * 6
+        }
 
         /**
          * [text] without the part that was already kept. Usually that's everything up to the

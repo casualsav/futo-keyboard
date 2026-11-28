@@ -144,4 +144,45 @@ class LiveSegmenterTest {
     fun aMarkAtTheStartOfAPieceJoinsWithoutASpace() {
         assertEquals("hello,", LiveSegmenter.join("hello", ","))
     }
+
+    @Test
+    fun anEmptyFinalPassKeepsWhatWasShown() {
+        val s = LiveSegmenter { it }
+        s.onPiece("I went to the store and then I came back home")
+        assertTrue(s.onPiece("", final = true).advanceAudioStart)
+        assertEquals("I went to the store and then I came back home", s.committed)
+        assertEquals("", s.pending)
+    }
+
+    @Test
+    fun aFinalPassThatDropsMostWordsKeepsWhatWasShown() {
+        val s = LiveSegmenter { it }
+        s.onPiece("First part. I went to the store and then I came back home")
+        s.onPiece("Thank you.", final = true)
+        assertEquals("First part. I went to the store and then I came back home", s.committed)
+    }
+
+    @Test
+    fun aFinalPassWithTheSameWordsOrMoreReplacesThePreview() {
+        val s = LiveSegmenter { it }
+        s.onPiece("I went to the stor and then")
+        s.onPiece("I went to the store and then I came back.", final = true)
+        assertEquals("I went to the store and then I came back.", s.committed)
+    }
+
+    @Test
+    fun aShortPreviewCanBeCorrectedByAShorterFinalPass() {
+        val s = LiveSegmenter { it }
+        s.onPiece("Okay so")
+        s.onPiece("Okay.", final = true)
+        assertEquals("Okay.", s.committed)
+    }
+
+    @Test
+    fun lostMostOfCountsWords() {
+        assertTrue(LiveSegmenter.lostMostOf("one two three four five", "one two"))
+        assertFalse(LiveSegmenter.lostMostOf("one two three four five", "one two three"))
+        assertTrue(LiveSegmenter.lostMostOf("one", ""))
+        assertFalse(LiveSegmenter.lostMostOf("", "anything"))
+    }
 }
