@@ -3,7 +3,7 @@ package org.futo.voiceinput.shared.types
 import org.futo.voiceinput.shared.ui.MicrophoneDeviceState
 
 enum class MagnitudeState {
-    NOT_TALKED_YET, MIC_MAY_BE_BLOCKED, TALKING
+    NOT_TALKED_YET, MIC_MAY_BE_BLOCKED, MIC_IN_USE, TALKING
 }
 
 interface AudioRecognizerListener {
@@ -30,6 +30,9 @@ interface AudioRecognizerListener {
 
     /** Called once per recording, when the mic first gives real (not silent) audio. */
     fun listening() {}
+
+    /** Another app took the mic; [listening] comes again once it is back. */
+    fun micTaken() {}
 
     /** Called when the recording ends on its own, after a pause or when out of space. */
     fun stoppedListening() {}

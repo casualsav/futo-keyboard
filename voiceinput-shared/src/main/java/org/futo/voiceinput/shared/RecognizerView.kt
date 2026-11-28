@@ -74,6 +74,7 @@ interface RecognizerViewListener {
 
     /** The mic is giving real audio, so speech from now on is caught. */
     fun listening() {}
+    fun micTaken() {}
 
     /** The recording ended on its own (the user didn't tap to stop). */
     fun stoppedListening() {}
@@ -198,6 +199,10 @@ class RecognizerView(
 
         override fun liveText(committed: String, display: String) {
             listener.liveText(committed, display)
+        }
+
+        override fun micTaken() {
+            listener.micTaken()
         }
 
         override fun listening() {

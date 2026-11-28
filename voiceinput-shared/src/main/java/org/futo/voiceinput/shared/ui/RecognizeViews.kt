@@ -188,6 +188,7 @@ fun InnerRecognize(
         val text = when (state.value) {
             MagnitudeState.NOT_TALKED_YET -> stringResource(R.string.try_saying_something)
             MagnitudeState.MIC_MAY_BE_BLOCKED -> stringResource(R.string.no_audio_detected_is_your_microphone_blocked)
+            MagnitudeState.MIC_IN_USE -> stringResource(R.string.microphone_in_use_by_another_app)
             MagnitudeState.TALKING -> stringResource(R.string.listening)
         }
 

@@ -43,6 +43,9 @@ interface ActionInputTransaction {
     fun updatePartial(text: String)
     fun commit(text: String)
     fun cancel()
+
+    /** False once the keyboard's hold on the text field has ended; writes then do nothing. */
+    val isActive: Boolean get() = true
 }
 
 data class DialogRequestItem(

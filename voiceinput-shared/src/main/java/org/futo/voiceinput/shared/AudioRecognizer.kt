@@ -10,6 +10,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
+import android.media.AudioRecordingConfiguration
 import android.media.MediaRecorder
 import android.media.MicrophoneDirection
 import android.media.audiofx.NoiseSuppressor
@@ -163,6 +164,12 @@ class AudioRecognizer(
 
     private var focusRequest: AudioFocusRequest? = null
 
+    // Android silences a recording while another app with priority uses the mic (a call, or an
+    // app on screen recording audio). The recording keeps running and gets audio back by itself
+    // once the other app lets go; meanwhile the user is told why nothing is heard.
+    @Volatile private var micSilenced = false
+    private var recordingCallback: Any? = null
+
     // Live voice typing state. The audio start is where the next piece begins; the last run end
     // is where the newest transcribed piece ended. Both are written only by the live pieces and
     // the final run, which never overlap; the recording loop reads them.
@@ -275,6 +282,7 @@ class AudioRecognizer(
     }
 
     fun reset() {
+        stopWatchingForSilencing()
         recorder?.stop()
         recorderJob?.cancel()
 
@@ -419,12 +427,30 @@ class AudioRecognizer(
         val samples = ShortArray(1600)
         // Some mics give silent (all zero) buffers while they warm up.
         var heardRealAudio = false
+        var chunksSinceSilencingCheck = 0
 
         while (isRecording) {
             yield()
             val nRead = recorder.read(samples, 0, 1600, AudioRecord.READ_BLOCKING)
             if (nRead <= 0) break
             yield()
+
+            // Another app has the mic: Android sends silence. Nothing of it is kept or counted
+            // toward auto-stop, and the buzz plays again once the mic is back.
+            if (++chunksSinceSilencingCheck >= 10) {
+                chunksSinceSilencingCheck = 0
+                micSilenced = isSilencedNow(recorder)
+            }
+            if (micSilenced) {
+                val wasHearing = heardRealAudio
+                heardRealAudio = false
+                framesSinceVoice = 0
+                withContext(Dispatchers.Main) {
+                    if (wasHearing) listener.micTaken()
+                    listener.updateMagnitude(0.0f, MagnitudeState.MIC_IN_USE)
+                }
+                continue
+            }
 
             var isRunningOutOfSpace = (floatSamples.remaining() < nRead.coerceAtLeast(1600)) && !expandSpaceIfAllowed()
 
@@ -562,6 +588,41 @@ class AudioRecognizer(
         println("isRecording loop exited")
     }
 
+    private fun isSilencedNow(recorder: AudioRecord): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        return try {
+            recorder.activeRecordingConfiguration?.isClientSilenced == true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun watchForSilencing(recorder: AudioRecord) {
+        stopWatchingForSilencing()
+        micSilenced = isSilencedNow(recorder)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        try {
+            val callback = object : AudioManager.AudioRecordingCallback() {
+                override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>?) {
+                    micSilenced = isSilencedNow(recorder)
+                }
+            }
+            recorder.registerAudioRecordingCallback(context.mainExecutor, callback)
+            recordingCallback = callback to recorder
+        } catch (_: Exception) {}
+    }
+
+    private fun stopWatchingForSilencing() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            @Suppress("UNCHECKED_CAST")
+            (recordingCallback as? Pair<AudioManager.AudioRecordingCallback, AudioRecord>)?.let { (cb, rec) ->
+                try { rec.unregisterAudioRecordingCallback(cb) } catch (_: Exception) {}
+            }
+        }
+        recordingCallback = null
+        micSilenced = false
+    }
+
     private fun hasRealAudio(samples: ShortArray, n: Int): Boolean {
         for (i in 0 until n) {
             if (samples[i].toInt() != 0) return true
@@ -589,6 +650,7 @@ class AudioRecognizer(
 
             recorder.startRecording()
             this.recorder = recorder
+            watchForSilencing(recorder)
 
             isRecording = true
 
@@ -711,6 +773,11 @@ class AudioRecognizer(
             ).trim()
         } catch (e: InferenceCancelledException) {
             return
+        } catch (e: Exception) {
+            // A piece that fails says nothing new: the preview stays and the next piece or the
+            // final pass covers this audio again.
+            e.printStackTrace()
+            return
         }
         val seg = segmenter ?: return
         val result = seg.onPiece(if (isBlankResult(raw)) "" else raw, final = keepAll)
@@ -767,8 +834,13 @@ class AudioRecognizer(
             } catch (e: InferenceCancelledException) {
                 yield()
                 return
+            } catch (e: Exception) {
+                // The final pass failed: what was shown is typed as it is.
+                e.printStackTrace()
+                null
             }
-            seg.onPiece(if (isBlankResult(raw)) "" else raw, final = true)
+            if (raw == null) seg.keepPending()
+            else seg.onPiece(if (isBlankResult(raw)) "" else raw, final = true)
         }
 
         val text = seg.committed

@@ -84,6 +84,7 @@ class ActionInputTransactionIME(val helper: IMEHelper) : IMEInterface, ActionInp
         ) else null
 
     private var isFinished = false
+    override val isActive: Boolean get() = !isFinished
     private var partialText = ""
     override fun updatePartial(text: String) {
         if (isFinished || !useComposingMode) return
